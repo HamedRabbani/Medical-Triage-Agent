@@ -186,8 +186,10 @@ Severity
 **streamlit run app.py**
 
 **سپس رابط کاربری در مرورگر باز می‌شود.**
+Live Demo:
 
-
+You can try the application here:
+https://medical-triage-agent-lyo7gdizppafhnnyszcwz6.streamlit.app/
 
 
 
