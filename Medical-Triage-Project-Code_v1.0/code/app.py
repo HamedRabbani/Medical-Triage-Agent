@@ -9,6 +9,7 @@ st.set_page_config(
 )
 
 st.title("Medical AI Triage")
+st.success("Success")
 
 
 def create_initial_state():

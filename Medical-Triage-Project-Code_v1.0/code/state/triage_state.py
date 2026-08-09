@@ -19,3 +19,4 @@ class TriageState(TypedDict, total=False):
 
     supervisor_status: str | None
     recommendation: str | None
+    
