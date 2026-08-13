@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from sqlalchemy import DateTime, Integer, String, text
+
 from sqlalchemy import DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -66,6 +68,7 @@ class UserAccount(Base):
         "CreatedAt",
         DateTime,
         nullable=False,
+        server_default=text("SYSUTCDATETIME()"),
     )
      
      # Related user-role assignments

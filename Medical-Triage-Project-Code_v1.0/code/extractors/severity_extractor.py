@@ -1,48 +1,60 @@
-import re
+def extract_severity(text: str) -> str | None:
+    """Extract symptom severity from text."""
 
-
-def extract_severity(text: str):
-
+    # Check longer phrases before shorter phrases
     severe = [
-        "severe",
         "very severe",
         "very painful",
-        "terrible",
-        "a lot",
-        "شدید",
-        "خیلی شدید",
+        "خیلی زیاد است",
+        "خیلی زیاد",
         "خیلی زیاده",
+        "خیلی شدید",
         "خیلی درد دارم",
         "دردم شدیده",
+        "severe",
+        "terrible",
+        "شدید",
+        "a lot",
         "زیاد",
     ]
 
     moderate = [
+        "نه کم نه زیاد",
         "moderate",
         "medium",
         "متوسط",
         "معمولی",
-        "نه کم نه زیاد",
-        
     ]
 
     mild = [
-        "mild",
-        "slight",
         "a little",
-        "خفیف",
-        "کم",
+        "slight",
+        "mild",
         "یه کم",
         "کمی",
+        "خفیف",
+        "کم",
     ]
 
-    if any(x in text for x in severe):
-        return "severe"
-
-    if any(x in text for x in moderate):
+    # Check specific moderate phrases first
+    if any(
+        phrase in text
+        for phrase in moderate
+    ):
         return "moderate"
 
-    if any(x in text for x in mild):
+    # Check severe phrases
+    if any(
+        phrase in text
+        for phrase in severe
+    ):
+        return "severe"
+
+    # Check mild phrases
+    if any(
+        phrase in text
+        for phrase in mild
+    ):
         return "mild"
 
     return None

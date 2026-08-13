@@ -43,7 +43,9 @@ class TriageService:
     ) -> ConversationMsg:
         """Add a message to an existing triage session."""
 
-        triage_session = self.uow.triage.get_by_id(session_id)
+        triage_session = self.uow.triage.get_by_id(
+            session_id
+        )
 
         if triage_session is None:
             raise ValueError(
@@ -70,7 +72,9 @@ class TriageService:
     ) -> TriageResult:
         """Persist a triage result."""
 
-        triage_session = self.uow.triage.get_by_id(session_id)
+        triage_session = self.uow.triage.get_by_id(
+            session_id
+        )
 
         if triage_session is None:
             raise ValueError(
@@ -96,34 +100,72 @@ class TriageService:
         risk_level: str,
         confidence_score: float,
         recommendation: str,
-    ) -> TriageResult:
-        """Execute the complete triage workflow atomically."""
+        session_id: int | None = None,
+    ) -> dict:
+        """Process triage using a new or existing session."""
 
         try:
-            session = self.start_session(patient_id)
+            # ---------------------------------
+            # Create a new session when needed
+            # ---------------------------------
+            if session_id is None:
 
-            # Generate SessionId
-            self.uow.session.flush()
+                session = self.start_session(
+                    patient_id
+                )
 
-            self.add_message(
-                session_id=session.session_id,
-                sender_type="Patient",
-                content=content,
-            )
+                # Generate SessionId
+                self.uow.session.flush()
 
+                session_id = session.session_id
+
+            # ---------------------------------
+            # Verify existing session
+            # ---------------------------------
+            else:
+
+                session = self.uow.triage.get_by_id(
+                    session_id
+                )
+
+                if session is None:
+                    raise ValueError(
+                        f"Triage session "
+                        f"{session_id} does not exist."
+                    )
+
+                if session.patient_id != patient_id:
+                    raise ValueError(
+                        "Session does not belong "
+                        "to the specified patient."
+                    )
+
+            # ---------------------------------
+            # Save final triage result
+            # ---------------------------------
             result = self.save_result(
-                session_id=session.session_id,
+                session_id=session_id,
                 risk_level=risk_level,
                 confidence_score=confidence_score,
                 recommendation=recommendation,
             )
 
-            # Commit once
+            # ---------------------------------
+            # Commit transaction
+            # ---------------------------------
             self.uow.commit()
 
-            return result
+            return {
+            "result_id": result.result_id,
+            "session_id": result.session_id,
+            "risk_level": result.risk_level,
+            "confidence_score": result.confidence_score,
+            "recommendation": result.recommendation,
+        }
 
         except Exception:
-            # Rollback entire transaction
+            # ---------------------------------
+            # Rollback transaction
+            # ---------------------------------
             self.uow.rollback()
             raise
