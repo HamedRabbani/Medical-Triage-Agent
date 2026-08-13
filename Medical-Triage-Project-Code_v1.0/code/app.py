@@ -15,19 +15,22 @@ st.success("Success")
 def create_initial_state():
 
     return {
-        "user_message": "",
-        "age": None,
-        "symptoms": [],
-        "severity": None,
-        "duration": None,
-        "red_flags": [],
-        "missing_information": [],
-        "next_question": None,
-        "risk_level": None,
-        "confidence": None,
-        "supervisor_status": None,
-        "recommendation": None,
-    }
+    "user_message": "",
+    "age": None,
+    "symptoms": [],
+    "severity": None,
+    "duration": None,
+    "red_flags": [],
+    "missing_information": [],
+    "next_question": None,
+    "risk_level": None,
+    "confidence": None,
+    "supervisor_status": None,
+    "recommendation": None,
+    "patient_id": 2,
+    "session_id": None,
+    "conversation_history": [],
+}
 
 
 if "triage_state" not in st.session_state:
@@ -79,9 +82,19 @@ if user_message:
     current_state["user_message"] = user_message
 
     result = triage_graph.invoke(
-        current_state
+    current_state
     )
 
+    st.write("DEBUG - Conversation History")
+
+    st.json(
+        result.get(
+            "conversation_history",
+            []
+        )
+    )
+
+    
     st.session_state.triage_state = result
 
     # Incomplete information
