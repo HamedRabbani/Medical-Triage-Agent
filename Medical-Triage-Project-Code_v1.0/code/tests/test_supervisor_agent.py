@@ -6,6 +6,9 @@ def test_supervisor_approved() -> None:
         "risk_level": "LOW",
         "confidence": 0.90,
         "red_flags": [],
+        "llm_risk_level": "LOW",
+        "llm_confidence": 0.90,
+        "llm_red_flags": [],
     }
 
     result = supervisor_agent(state)
@@ -21,6 +24,9 @@ def test_supervisor_high_with_red_flags() -> None:
         "risk_level": "HIGH",
         "confidence": 0.90,
         "red_flags": ["chest pain"],
+        "llm_risk_level": "HIGH",
+        "llm_confidence": 0.90,
+        "llm_red_flags": ["chest pain"],
     }
 
     result = supervisor_agent(state)
@@ -36,6 +42,9 @@ def test_supervisor_high_without_red_flags() -> None:
         "risk_level": "HIGH",
         "confidence": 0.90,
         "red_flags": [],
+        "llm_risk_level": "HIGH",
+        "llm_confidence": 0.90,
+        "llm_red_flags": [],
     }
 
     result = supervisor_agent(state)
@@ -51,6 +60,9 @@ def test_supervisor_missing_risk() -> None:
         "risk_level": None,
         "confidence": 0.90,
         "red_flags": [],
+        "llm_risk_level": "LOW",
+        "llm_confidence": 0.90,
+        "llm_red_flags": [],
     }
 
     result = supervisor_agent(state)
@@ -59,12 +71,3 @@ def test_supervisor_missing_risk() -> None:
     print(f"Status: {result.get('supervisor_status')}")
 
     assert result["supervisor_status"] == "REJECTED"
-
-
-if __name__ == "__main__":
-    test_supervisor_approved()
-    test_supervisor_high_with_red_flags()
-    test_supervisor_high_without_red_flags()
-    test_supervisor_missing_risk()
-
-    print("\nAll supervisor tests PASSED.")

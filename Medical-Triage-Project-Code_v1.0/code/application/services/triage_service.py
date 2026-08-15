@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 
 from infrastructure.database.models.conversation_msg import ConversationMsg
 from infrastructure.database.models.triage_result import TriageResult
@@ -27,7 +27,7 @@ class TriageService:
 
         triage_session = TriageSession(
             patient_id=patient_id,
-            start_time=datetime.utcnow(),
+            start_time=datetime.now(UTC),
             status="Active",
         )
 
@@ -56,7 +56,7 @@ class TriageService:
             session_id=session_id,
             sender_type=sender_type,
             content=content,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
         )
 
         self.uow.triage.add_message(message)
@@ -86,7 +86,7 @@ class TriageService:
             risk_level=risk_level,
             confidence_score=confidence_score,
             recommendation=recommendation,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
         )
 
         self.uow.triage.add_result(result)
@@ -155,17 +155,10 @@ class TriageService:
             # ---------------------------------
             self.uow.commit()
 
-            return {
-            "result_id": result.result_id,
-            "session_id": result.session_id,
-            "risk_level": result.risk_level,
-            "confidence_score": result.confidence_score,
-            "recommendation": result.recommendation,
-        }
+            return result
 
         except Exception:
-            # ---------------------------------
-            # Rollback transaction
-            # ---------------------------------
             self.uow.rollback()
             raise
+
+     

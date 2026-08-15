@@ -1,3 +1,5 @@
+# TriageRepository
+
 from infrastructure.database.models.conversation_msg import ConversationMsg
 from infrastructure.database.models.triage_result import TriageResult
 from infrastructure.database.models.triage_session import TriageSession
@@ -13,18 +15,43 @@ class TriageRepository:
     # Triage Session
     # -------------------------
 
+    def get_all(self) -> list[TriageSession]:
+        """Get all triage sessions."""
+
+        return (
+            self.session
+            .query(TriageSession)
+            .all()
+        )
+
     def get_by_id(
         self,
         session_id: int,
     ) -> TriageSession | None:
-        """Get triage session by ID."""
+        """Get a triage session by ID."""
 
         return (
-            self.session.query(TriageSession)
+            self.session
+            .query(TriageSession)
             .filter(
                 TriageSession.session_id == session_id
             )
             .first()
+        )
+
+    def get_by_patient_id(
+        self,
+        patient_id: int,
+    ) -> list[TriageSession]:
+        """Get all triage sessions for a patient."""
+
+        return (
+            self.session
+            .query(TriageSession)
+            .filter(
+                TriageSession.patient_id == patient_id
+            )
+            .all()
         )
 
     def add(
@@ -60,7 +87,8 @@ class TriageRepository:
         """Get messages for a triage session."""
 
         return (
-            self.session.query(ConversationMsg)
+            self.session
+            .query(ConversationMsg)
             .filter(
                 ConversationMsg.session_id == session_id
             )
@@ -86,12 +114,28 @@ class TriageRepository:
         self,
         session_id: int,
     ) -> TriageResult | None:
-        """Get triage result by session ID."""
+        """Get the first triage result for a session."""
 
         return (
-            self.session.query(TriageResult)
+            self.session
+            .query(TriageResult)
             .filter(
                 TriageResult.session_id == session_id
             )
             .first()
+        )
+
+    def get_results(
+        self,
+        session_id: int,
+    ) -> list[TriageResult]:
+        """Get all triage results for a session."""
+
+        return (
+            self.session
+            .query(TriageResult)
+            .filter(
+                TriageResult.session_id == session_id
+            )
+            .all()
         )

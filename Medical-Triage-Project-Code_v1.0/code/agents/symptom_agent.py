@@ -7,80 +7,113 @@ from utils.text_normalizer import normalize_text
 
 
 def symptom_agent(state, llm_service=None):
-    """Extract patient information from conversation history."""
+    """
+    Extract patient information from the current conversation.
 
-    old_symptoms = state.get("symptoms", [])
+    Deterministic extractors are the baseline.
+    LLM extraction is optional and must never destroy
+    already extracted information.
+    """
+
+    symptoms = list(state.get("symptoms") or [])
+
     age = state.get("age")
     duration = state.get("duration")
     severity = state.get("severity")
 
-    conversation_history = state.get(
-        "conversation_history",
-        [],
+    # ---------------------------------------------------------
+    # Collect patient messages
+    # ---------------------------------------------------------
+
+    conversation_history = (
+        state.get("conversation_history") or []
     )
 
-    patient_messages = [
-        message.get("content", "")
-        for message in conversation_history
-        if message.get("sender_type") == "Patient"
-    ]
+    patient_messages = []
 
-    if not patient_messages:
-        current_message = state.get(
-            "user_message",
-            "",
-        )
+    for message in conversation_history:
+        if not isinstance(message, dict):
+            continue
 
-        if current_message:
-            patient_messages = [current_message]
+        if message.get("sender_type") == "Patient":
+            content = message.get("content")
+
+            if isinstance(content, str) and content.strip():
+                patient_messages.append(content)
+
+    # ---------------------------------------------------------
+    # Fallback to current user message
+    # ---------------------------------------------------------
+
+    current_message = state.get(
+        "user_message",
+        "",
+    )
+
+    if (
+        isinstance(current_message, str)
+        and current_message.strip()
+        and current_message not in patient_messages
+    ):
+        patient_messages.append(current_message)
+
+    # ---------------------------------------------------------
+    # Deterministic extraction
+    # ---------------------------------------------------------
 
     for message in patient_messages:
 
         text = normalize_text(message)
 
-        # -------------------------
-        # Deterministic extraction
-        # -------------------------
+        # Symptoms
+        extracted_symptoms = extract_symptoms(text)
 
-        new_symptoms = extract_symptoms(text)
-        old_symptoms.extend(new_symptoms)
+        for symptom in extracted_symptoms:
+            if symptom not in symptoms:
+                symptoms.append(symptom)
 
-        new_age = extract_age(text)
+        # Age
+        extracted_age = extract_age(text)
 
-        if new_age is not None:
-            age = new_age
+        if extracted_age is not None:
+            age = extracted_age
 
-        new_duration = extract_duration(text)
+        # Duration
+        extracted_duration = extract_duration(text)
 
-        if new_duration is not None:
-            duration = new_duration
+        if extracted_duration is not None:
+            duration = extracted_duration
 
-        new_severity = extract_severity(text)
+        # Severity
+        extracted_severity = extract_severity(text)
 
-        if new_severity is not None:
-            severity = new_severity
+        if extracted_severity is not None:
+            severity = extracted_severity
 
-        # -------------------------
-        # LLM extraction
-        # -------------------------
-
-        if llm_service is not None:
-
-            llm_result = llm_service.extract_symptoms(
-                text
-            )
-
-            old_symptoms.extend(
-                llm_result.symptoms
-            )
-
-    symptoms = list(
-        dict.fromkeys(old_symptoms)
-    )
+    # ---------------------------------------------------------
+    # LLM extraction
+    # ---------------------------------------------------------
+    #
+    # Do NOT call a second LLM extraction here when the
+    # Conversation Agent has already extracted structured
+    # information.
+    #
+    # This prevents:
+    #
+    # Conversation Agent
+    #       ↓
+    # extraction
+    #       ↓
+    # Symptom Agent
+    #       ↓
+    # second extraction
+    #
+    # and makes Mock call ordering deterministic.
+    # ---------------------------------------------------------
 
     return {
         **state,
-        "symptoms": symptoms,
+        "symptoms": list(dict.fromkeys(symptoms)),
         "age": age,
         "duration": duration,
         "severity": severity,

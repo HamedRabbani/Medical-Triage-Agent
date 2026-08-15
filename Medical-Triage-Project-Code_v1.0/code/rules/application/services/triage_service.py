@@ -27,7 +27,7 @@ class TriageService:
 
         triage_session = TriageSession(
             patient_id=patient_id,
-            start_time=datetime.utcnow(),
+            start_time=datetime.now(datetime.UTC),
             status="Active",
         )
 

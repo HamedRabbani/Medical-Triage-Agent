@@ -2,30 +2,69 @@ from typing import TypedDict
 
 
 class TriageState(TypedDict, total=False):
-    # Session identity
+
+    # =====================================================
+    # Patient / Session
+    # =====================================================
+
     patient_id: int | None
     session_id: int | None
 
-    # User input
+    # =====================================================
+    # Input
+    # =====================================================
+
     user_message: str
 
-    # Extracted information
+    # =====================================================
+    # Extracted Patient Information
+    # =====================================================
+
     age: int | None
     symptoms: list[str]
     severity: str | None
     duration: str | None
 
-    # Risk assessment
+    # =====================================================
+    # Rule-Based Risk Assessment
+    # =====================================================
+
     red_flags: list[str]
-    missing_information: list[str]
-    next_question: str | None
 
     risk_level: str | None
     confidence: float | None
-
-    # Final decision
-    supervisor_status: str | None
     recommendation: str | None
+
+    # =====================================================
+    # Planner
+    # =====================================================
+
+    missing_information: list[str]
+    next_question: str | None
+
+    # =====================================================
+    # LLM Risk Assessment
+    # =====================================================
+
+    llm_risk_level: str | None
+    llm_confidence: float | None
+    llm_red_flags: list[str] | None
+    llm_recommendation: str | None
+
+    # =====================================================
+    # Supervisor
+    # =====================================================
+
+    supervisor_status: str | None
+
+    # =====================================================
+    # Conversation / Persistence
+    # =====================================================
 
     conversation_history: list[dict]
     result_id: int | None
+
+
+    intent: str | None
+    intent_confidence: float | None
+    assistant_response: str | None

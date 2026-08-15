@@ -1,5 +1,5 @@
-from datetime import datetime
-
+from datetime import datetime, UTC
+import uuid
 from .models import (
     ConversationMsg,
     PatientProfile,
@@ -17,11 +17,11 @@ def test_database_integration() -> None:
         try:
             # Create test user
             user = UserAccount(
-                email="hamedrabbani304@gmail.com",
+                email=f"test_{uuid.uuid4().hex}@example.com",
                 password_hash="hamedrabbani123456789",
                 phone=None,
                 status="Active",
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(UTC),
             )
 
             session.add(user)
@@ -35,7 +35,7 @@ def test_database_integration() -> None:
                 date_of_birth=datetime(1995, 1, 1),
                 gender="Unknown",
                 national_id="hamed-rabbani-001",
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(UTC),
             )
 
             session.add(patient)
@@ -44,7 +44,7 @@ def test_database_integration() -> None:
             # Create triage session
             triage_session = TriageSession(
                 patient_id=patient.patient_id,
-                start_time=datetime.utcnow(),
+                start_time=datetime.now(UTC),
                 status="Active",
             )
 
@@ -56,7 +56,7 @@ def test_database_integration() -> None:
                 session_id=triage_session.session_id,
                 sender_type="Patient",
                 content="I have chest pain.",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(UTC),
             )
 
             session.add(message)
@@ -67,7 +67,7 @@ def test_database_integration() -> None:
                 risk_level="High",
                 confidence_score=95.00,
                 recommendation="Seek immediate medical attention.",
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(UTC),
             )
 
             session.add(result)

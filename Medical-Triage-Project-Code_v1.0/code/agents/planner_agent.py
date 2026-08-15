@@ -1,4 +1,10 @@
 def planner_agent(state):
+    """
+    Determine which patient information is missing.
+
+    The planner reports missing information.
+    It does NOT decide whether risk assessment must stop.
+    """
 
     missing = []
 
@@ -15,18 +21,22 @@ def planner_agent(state):
         missing.append("severity")
 
     questions = {
-
-        "age":
-            "How old are you? / چند سال دارید؟",
-
-        "symptoms":
-            "What symptoms are you experiencing? / چه علائمی دارید؟",
-
-        "duration":
-            "How long have you had these symptoms? / چند وقت است این علائم را دارید؟",
-
-        "severity":
-            "How severe are your symptoms? / شدت علائم چقدر است؟",
+        "age": (
+            "How old are you? / "
+            "چند سال دارید؟"
+        ),
+        "symptoms": (
+            "What symptoms are you experiencing? / "
+            "چه علائمی دارید؟"
+        ),
+        "duration": (
+            "How long have you had these symptoms? / "
+            "چند وقت است این علائم را دارید؟"
+        ),
+        "severity": (
+            "How severe are your symptoms? / "
+            "شدت علائم چقدر است؟"
+        ),
     }
 
     next_question = None

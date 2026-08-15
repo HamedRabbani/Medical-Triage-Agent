@@ -54,9 +54,8 @@ def persistence_agent(state):
             recommendation=recommendation,
             session_id=session_id,
         )
-
-    return {
-    **state,
-    "session_id": result["session_id"],
-    "result_id": result["result_id"],
-}
+        return {
+            **state,
+            "session_id": result.session_id,
+            "result_id": result.result_id,
+        }

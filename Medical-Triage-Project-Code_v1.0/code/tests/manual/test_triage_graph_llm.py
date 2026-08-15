@@ -18,7 +18,7 @@ def main():
 
     state = {
         "patient_id": 2,
-        "user_message": "من تب و سردرد دارم",
+        "user_message": "من 35 ساله هستم، تب و سردرد شدید دارم، مدت 2 روز است",
         "conversation_history": [],
         "symptoms": [],
         "age": None,
@@ -28,6 +28,11 @@ def main():
     }
 
     result = graph.invoke(state)
+    print("\nLLM RISK:")
+    print("llm_risk_level:", result.get("llm_risk_level"))
+    print("llm_confidence:", result.get("llm_confidence"))
+    print("llm_red_flags:", result.get("llm_red_flags"))
+    print("llm_recommendation:", result.get("llm_recommendation"))
 
     print("\nFINAL STATE:")
     print(result)
