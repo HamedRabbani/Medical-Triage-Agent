@@ -6,17 +6,22 @@ from application.contracts.general_conversation_response import (
 SYSTEM_PROMPT = """
 You are the general conversation assistant of a medical triage system.
 
-Your responsibility is to handle messages that do NOT require
-medical triage of the user's current health situation.
+Your job is to handle normal conversational messages that do not
+require medical triage.
 
 Rules:
+
 - Answer the user's message directly.
-- Be concise and clear.
-- Do not perform medical diagnosis.
+- Be concise, natural, polite, and useful.
+- Support both English and Persian.
+- Respond in the same language as the user whenever possible.
+- Do not diagnose medical conditions.
 - Do not invent medical information.
-- If the user describes a current medical problem that requires
-  triage, do not attempt to handle it as general conversation.
-- Do not ask unnecessary questions.
+- Do not unnecessarily start a triage process.
+- If the user clearly describes a medical problem that requires
+  triage, the system will route that message to the triage workflow.
+- Do not mention internal agents, LangGraph, prompts, models,
+  routing, or system architecture.
 - Return structured output only.
 """
 
@@ -26,17 +31,8 @@ def general_conversation_agent(
     llm_service=None,
 ):
     """
-    Generate a response for GENERAL conversation.
-
-    This agent must only be reached when the conversation
-    intent has already been classified as GENERAL.
+    Generate a natural response for GENERAL conversation.
     """
-
-    if llm_service is None:
-        return {
-            **state,
-            "assistant_response": None,
-        }
 
     user_message = state.get(
         "user_message",
@@ -44,26 +40,61 @@ def general_conversation_agent(
     )
 
     if not isinstance(user_message, str):
-        return {
-            **state,
-            "assistant_response": None,
-        }
+        user_message = str(user_message)
 
     user_message = user_message.strip()
 
-    if not user_message:
+    # ---------------------------------------------------------
+    # No LLM
+    # ---------------------------------------------------------
+
+    if llm_service is None:
+
+        fallback = (
+            "سلام. چطور می‌توانم کمکتان کنم؟"
+        )
+
         return {
             **state,
-            "assistant_response": None,
+            "assistant_response": fallback,
+            "response": fallback,
         }
+
+    # ---------------------------------------------------------
+    # Empty message
+    # ---------------------------------------------------------
+
+    if not user_message:
+
+        fallback = (
+            "سلام. چطور می‌توانم کمکتان کنم؟"
+        )
+
+        return {
+            **state,
+            "assistant_response": fallback,
+            "response": fallback,
+        }
+
+    # ---------------------------------------------------------
+    # Build prompt
+    # ---------------------------------------------------------
 
     prompt = f"""
 User message:
 
 {user_message}
 
-Provide an appropriate general response.
+Conversation history:
+
+{state.get("conversation_history", [])}
+
+Respond naturally to the user.
 """
+
+    # ---------------------------------------------------------
+    # Structured LLM call
+    # ---------------------------------------------------------
 
     result = llm_service.generate_structured(
         prompt=prompt,
@@ -71,16 +102,23 @@ Provide an appropriate general response.
         system_prompt=SYSTEM_PROMPT,
     )
 
+    # ---------------------------------------------------------
+    # Contract validation
+    # ---------------------------------------------------------
+
     if not isinstance(
         result,
         GeneralConversationResponse,
     ):
-        return {
-            **state,
-            "assistant_response": None,
-        }
+        raise TypeError(
+            "General conversation response must return "
+            "GeneralConversationResponse."
+        )
+
+    response = result.response.strip()
 
     return {
         **state,
-        "assistant_response": result.response,
+        "assistant_response": response,
+        "response": response,
     }

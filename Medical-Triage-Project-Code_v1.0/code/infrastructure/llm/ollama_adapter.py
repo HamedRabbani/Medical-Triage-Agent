@@ -1,7 +1,12 @@
+from typing import TypeVar
+
 from ollama import Client
 from pydantic import BaseModel
 
 from application.ports.llm_port import LLMPort
+
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class OllamaAdapter(LLMPort):
@@ -48,10 +53,10 @@ class OllamaAdapter(LLMPort):
     def generate_structured(
         self,
         prompt: str,
-        response_model: type[BaseModel],
+        response_model: type[T],
         *,
         system_prompt: str | None = None,
-    ) -> BaseModel:
+    ) -> T:
 
         messages = []
 

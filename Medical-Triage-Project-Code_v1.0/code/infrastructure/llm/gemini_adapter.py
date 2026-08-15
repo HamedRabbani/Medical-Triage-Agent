@@ -1,8 +1,13 @@
+from typing import TypeVar
+
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
 from application.ports.llm_port import LLMPort
+
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class GeminiAdapter(LLMPort):
@@ -40,10 +45,10 @@ class GeminiAdapter(LLMPort):
     def generate_structured(
         self,
         prompt: str,
-        response_model: type[BaseModel],
+        response_model: type[T],
         *,
         system_prompt: str | None = None,
-    ) -> BaseModel:
+    ) -> T:
 
         config = types.GenerateContentConfig(
             response_mime_type="application/json",
@@ -62,4 +67,6 @@ class GeminiAdapter(LLMPort):
         if response.parsed is not None:
             return response.parsed
 
-        return response_model.model_validate_json(response.text)
+        return response_model.model_validate_json(
+            response.text
+        )

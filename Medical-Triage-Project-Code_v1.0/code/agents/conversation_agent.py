@@ -1,289 +1,200 @@
-from application.contracts.conversation_extraction import (
-    ConversationExtraction,
-)
-from application.contracts.conversation_intent import (
-    ConversationIntent,
-)
-from application.contracts.general_conversation_response import (
-    GeneralConversationResponse,
-)
+from extractors.age_extractor import extract_age
+from extractors.symptom_extractor import extract_symptoms
+from extractors.duration_extractor import extract_duration
+from extractors.severity_extractor import extract_severity
+
+from utils.text_normalizer import normalize_text
 
 
-SYSTEM_PROMPT = """
-You are the conversation understanding layer of a medical triage system.
+# =============================================================
+# Active Triage Detection
+# =============================================================
 
-Classify the user's message into exactly one intent:
+def _is_active_triage(state):
+    """
+    Determine whether the conversation is already inside
+    an active medical triage flow.
 
-TRIAGE:
-The user is providing, describing, discussing, or asking about
-their own symptoms, medical condition, injury, or health situation
-that may require triage.
+    Important:
+    A single extracted field such as severity must NOT
+    automatically start a triage flow.
 
-GENERAL:
-The user is having a general conversation or asking something
-that does not require medical triage of their current situation.
+    Active triage requires stronger evidence:
+    - explicit TRIAGE intent
+    - existing symptoms
+    - missing triage information
+    - an active next question
+    """
 
-Rules:
-- Understand meaning and context.
-- Do not use keyword matching.
-- Do not diagnose.
-- Do not invent information.
-- Return structured output only.
-"""
+    # ---------------------------------------------------------
+    # Explicit intent
+    # ---------------------------------------------------------
+
+    if state.get("intent") == "TRIAGE":
+        return True
+
+    # ---------------------------------------------------------
+    # Existing symptoms
+    # ---------------------------------------------------------
+
+    if state.get("symptoms"):
+        return True
+
+    # ---------------------------------------------------------
+    # Planner is waiting for required information
+    # ---------------------------------------------------------
+
+    if state.get("missing_information"):
+        return True
+
+    # ---------------------------------------------------------
+    # Agent has already asked a triage question
+    # ---------------------------------------------------------
+
+    if state.get("next_question") is not None:
+        return True
+
+    return False
 
 
-EXTRACTION_SYSTEM_PROMPT = """
-You are the medical information extraction layer of a medical
-triage system.
+# =============================================================
+# Intent Detection
+# =============================================================
 
-Extract ONLY information explicitly provided by the user.
+def _detect_intent(state, message):
+    """
+    Detect the intent of the current user message.
 
-Extract:
-- symptoms
-- severity
-- age
-- duration
-- red flags
+    Priority:
 
-Rules:
-- Do not invent information.
-- Do not diagnose.
-- Do not infer unstated symptoms.
-- Preserve previously known information.
-- Return structured output only.
-"""
+    1. Existing active triage
+    2. Explicit medical information in current message
+    3. General conversation
+    """
+
+    # ---------------------------------------------------------
+    # Existing triage has priority
+    # ---------------------------------------------------------
+
+    if _is_active_triage(state):
+        return "TRIAGE", 1.0
+
+    # ---------------------------------------------------------
+    # Normalize message
+    # ---------------------------------------------------------
+
+    text = normalize_text(message)
+
+    if not text:
+        return "GENERAL", 1.0
+
+    # ---------------------------------------------------------
+    # Detect medical information
+    # ---------------------------------------------------------
+
+    symptoms = extract_symptoms(text)
+
+    if symptoms:
+        return "TRIAGE", 1.0
+
+    age = extract_age(text)
+
+    if age is not None:
+        return "TRIAGE", 0.9
+
+    duration = extract_duration(text)
+
+    if duration is not None:
+        return "TRIAGE", 0.9
+
+    # ---------------------------------------------------------
+    # IMPORTANT:
+    # Severity alone should NOT start triage.
+    #
+    # Example:
+    # "حالم خوبه"
+    # "شدت صدا زیاده"
+    #
+    # A severity extractor may accidentally match
+    # unrelated language.
+    # ---------------------------------------------------------
+
+    severity = extract_severity(text)
+
+    if severity is not None and symptoms:
+        return "TRIAGE", 0.9
+
+    # ---------------------------------------------------------
+    # Otherwise GENERAL
+    # ---------------------------------------------------------
+
+    return "GENERAL", 0.9
 
 
-GENERAL_RESPONSE_SYSTEM_PROMPT = """
-You are the general conversation response layer of a medical
-triage system.
-
-Respond naturally and briefly to the user's message.
-
-Rules:
-- Do not perform medical triage.
-- Do not diagnose.
-- Do not invent medical information.
-- Return structured output only.
-"""
-
+# =============================================================
+# Conversation Agent
+# =============================================================
 
 def conversation_agent(
     state,
     llm_service=None,
+    short_term_memory_service=None,
 ):
     """
-    Conversation understanding layer.
+    Process one conversation turn.
 
-    GENERAL:
+    Responsibilities:
 
-        User Message
-             ↓
-        Intent Classification
-             ↓
-        General Response
-             ↓
-            END
-
-    TRIAGE:
-
-        User Message
-             ↓
-        Intent Classification
-             ↓
-        Medical Extraction
-             ↓
-        Triage Pipeline
+    - preserve conversation history
+    - store current patient message
+    - detect intent
+    - keep triage follow-up answers inside TRIAGE
     """
 
-    # =========================================================
-    # No LLM
-    # =========================================================
+    message = state.get("user_message", "")
 
-    if llm_service is None:
-        return state
+    if not isinstance(message, str):
+        message = str(message)
 
-    text = state.get(
-        "user_message",
-        "",
+    message = message.strip()
+
+    # ---------------------------------------------------------
+    # Conversation history
+    # ---------------------------------------------------------
+
+    history = list(
+        state.get("conversation_history") or []
     )
 
-    # =========================================================
-    # Empty Message
-    # =========================================================
+    # ---------------------------------------------------------
+    # Store current patient message
+    # ---------------------------------------------------------
 
-    if not isinstance(text, str) or not text.strip():
-
-        response = "Hello. How can I help you?"
-
-        return {
-            **state,
-            "intent": "GENERAL",
-            "intent_confidence": 1.0,
-            "assistant_response": response,
-            "response": response,
-        }
-
-    # =========================================================
-    # 1. Intent Classification
-    # =========================================================
-
-    intent_result = llm_service.generate_structured(
-        prompt=f"""
-User message:
-
-{text}
-
-Classify the intent of this message.
-""",
-        response_model=ConversationIntent,
-        system_prompt=SYSTEM_PROMPT,
-    )
-
-    # Defensive validation
-    if not isinstance(
-        intent_result,
-        ConversationIntent,
-    ):
-        return state
-
-    result = {
-        **state,
-        "intent": intent_result.intent,
-        "intent_confidence": intent_result.confidence,
-    }
-
-    # =========================================================
-    # 2. GENERAL Conversation
-    # =========================================================
-
-    if intent_result.intent == "GENERAL":
-
-        response_result = (
-            llm_service.generate_structured(
-                prompt=f"""
-User message:
-
-{text}
-
-Generate a natural response to this message.
-""",
-                response_model=GeneralConversationResponse,
-                system_prompt=GENERAL_RESPONSE_SYSTEM_PROMPT,
-            )
+    if message:
+        history.append(
+            {
+                "sender_type": "Patient",
+                "content": message,
+            }
         )
 
-        # Defensive validation
-        if not isinstance(
-            response_result,
-            GeneralConversationResponse,
-        ):
-            return {
-                **result,
-                "assistant_response": (
-                    "Hello. How can I help you?"
-                ),
-                "response": (
-                    "Hello. How can I help you?"
-                ),
-            }
+    # ---------------------------------------------------------
+    # Detect intent
+    # ---------------------------------------------------------
 
-        response = response_result.response
-
-        return {
-            **result,
-            "assistant_response": response,
-            "response": response,
-        }
-
-    # =========================================================
-    # 3. TRIAGE Medical Extraction
-    # =========================================================
-
-    prompt = f"""
-Previous known information:
-
-Symptoms: {state.get("symptoms", [])}
-Severity: {state.get("severity")}
-Age: {state.get("age")}
-Duration: {state.get("duration")}
-Red flags: {state.get("red_flags", [])}
-
-New patient message:
-
-{text}
-
-Extract only NEW medical information explicitly provided
-in the new message.
-"""
-
-    extraction_result = llm_service.generate_structured(
-        prompt=prompt,
-        response_model=ConversationExtraction,
-        system_prompt=EXTRACTION_SYSTEM_PROMPT,
+    intent, confidence = _detect_intent(
+        state,
+        message,
     )
 
-    # Defensive validation
-    if not isinstance(
-        extraction_result,
-        ConversationExtraction,
-    ):
-        return result
-
-    # =========================================================
-    # 4. Merge Symptoms
-    # =========================================================
-
-    symptoms = list(
-        state.get("symptoms") or []
-    )
-
-    for symptom in (
-        extraction_result.symptoms or []
-    ):
-        if symptom not in symptoms:
-            symptoms.append(symptom)
-
-    # =========================================================
-    # 5. Merge Red Flags
-    # =========================================================
-
-    red_flags = list(
-        state.get("red_flags") or []
-    )
-
-    for flag in (
-        extraction_result.red_flags or []
-    ):
-        if flag not in red_flags:
-            red_flags.append(flag)
-
-    # =========================================================
-    # 6. Return TRIAGE State
-    # =========================================================
+    # ---------------------------------------------------------
+    # Return updated state
+    # ---------------------------------------------------------
 
     return {
-        **result,
-
-        "symptoms": symptoms,
-
-        "severity": (
-            extraction_result.severity
-            if extraction_result.severity is not None
-            else state.get("severity")
-        ),
-
-        "age": (
-            extraction_result.age
-            if extraction_result.age is not None
-            else state.get("age")
-        ),
-
-        "duration": (
-            extraction_result.duration
-            if extraction_result.duration is not None
-            else state.get("duration")
-        ),
-
-        "red_flags": red_flags,
+        **state,
+        "conversation_history": history,
+        "intent": intent,
+        "intent_confidence": confidence,
+        "assistant_response": None,
     }

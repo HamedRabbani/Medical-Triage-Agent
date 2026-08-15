@@ -4,29 +4,48 @@ from state.triage_state import TriageState
 
 from agents.session_agent import session_agent
 from agents.conversation_agent import conversation_agent
+from agents.general_conversation_agent import general_conversation_agent
 from agents.symptom_agent import symptom_agent
 from agents.planner_agent import planner_agent
 from agents.risk_agent import risk_agent
 from agents.supervisor_agent import supervisor_agent
 from agents.persistence_agent import persistence_agent
+from application.config.llm_config import LLMConfig
+from infrastructure.llm.llm_factory import create_llm
 
-
+from agents.general_conversation_agent import general_conversation_agent
 # =============================================================
 # Intent Router
 # =============================================================
 
 def route_intent(state):
     """
-    Route the conversation according to intent.
+    Route the conversation to either:
 
-    TRIAGE  -> medical triage pipeline
-    GENERAL -> general conversation
+    - TRIAGE flow
+    - GENERAL conversation
 
-    Backward compatibility is preserved for older tests
-    that directly provide clinical information.
+    Active triage always has priority over GENERAL.
     """
 
     intent = state.get("intent")
+
+    # ---------------------------------------------------------
+    # Active triage
+    # ---------------------------------------------------------
+
+    if (
+        state.get("symptoms")
+        and (
+            state.get("missing_information")
+            or state.get("next_question") is not None
+        )
+    ):
+        return "triage"
+
+    # ---------------------------------------------------------
+    # Explicit intent
+    # ---------------------------------------------------------
 
     if intent == "TRIAGE":
         return "triage"
@@ -34,42 +53,28 @@ def route_intent(state):
     if intent == "GENERAL":
         return "general"
 
-    # Legacy/direct triage flow
-    if (
-        state.get("symptoms")
-        or state.get("severity") is not None
-        or state.get("duration") is not None
-        or state.get("age") is not None
-    ):
+    # ---------------------------------------------------------
+    # Backward compatibility
+    # ---------------------------------------------------------
+
+    if state.get("symptoms"):
         return "triage"
 
-    # Existing full-triage tests may provide only user_message.
-    # Let Conversation Agent handle those messages.
-    user_message = state.get(
-        "user_message",
-        "",
-    )
+    if state.get("age") is not None:
+        return "triage"
 
-    if isinstance(user_message, str):
-        medical_terms = {
-            "pain",
-            "chest",
-            "fever",
-            "cough",
-            "headache",
-            "shortness",
-            "breath",
-            "bleeding",
-            "vomiting",
-            "dizziness",
-        }
+    if state.get("duration") is not None:
+        return "triage"
 
-        words = set(
-            user_message.lower().split()
-        )
+    if state.get("severity") is not None:
+        return "triage"
 
-        if words.intersection(medical_terms):
-            return "triage"
+    if state.get("next_question") is not None:
+        return "triage"
+
+    # ---------------------------------------------------------
+    # Default
+    # ---------------------------------------------------------
 
     return "general"
 
@@ -78,48 +83,46 @@ def route_intent(state):
 # Planner Router
 # =============================================================
 
-def check_information(state):
+def route_planner(state):
     """
-    Decide whether enough clinical information exists
-    for risk assessment.
+    Decide whether the workflow should:
 
-    Age is NOT mandatory for initial risk assessment.
+    - perform risk assessment
+    - wait for more information
     """
 
     symptoms = state.get("symptoms") or []
     severity = state.get("severity")
-    duration = state.get("duration")
+
+    # ---------------------------------------------------------
+    # Immediate high-risk conditions
+    # ---------------------------------------------------------
 
     if (
-        symptoms
-        and severity is not None
-        and duration is not None
+        "chest pain" in symptoms
+        and "shortness of breath" in symptoms
     ):
-        return "complete"
+        return "risk"
 
-    return "incomplete"
+    if severity == "severe":
+        return "risk"
 
+    # ---------------------------------------------------------
+    # Missing information
+    # ---------------------------------------------------------
 
-# =============================================================
-# General Conversation
-# =============================================================
+    missing_information = (
+        state.get("missing_information") or []
+    )
 
-def general_conversation(state):
-    """
-    Handle a general conversation.
+    if missing_information:
+        return "ask"
 
-    Current baseline response is deterministic.
-    LLM-based general response generation can be introduced
-    later without changing the routing architecture.
-    """
+    # ---------------------------------------------------------
+    # Complete information
+    # ---------------------------------------------------------
 
-    response = "Hello. How can I help you?"
-
-    return {
-        **state,
-        "assistant_response": response,
-        "response": response,
-    }
+    return "risk"
 
 
 # =============================================================
@@ -129,6 +132,9 @@ def general_conversation(state):
 def debug_risk_state(state):
     """
     Temporary debugging node.
+
+    Can be removed later after the LLM/risk pipeline
+    becomes stable.
     """
 
     print("\n========== AFTER RISK AGENT ==========")
@@ -181,21 +187,58 @@ def debug_risk_state(state):
 
 
 # =============================================================
+# General Conversation Node
+# =============================================================
+
+def general_conversation(state):
+    """
+    Final processing node for GENERAL conversations.
+
+    The actual LLM response is generated by
+    general_conversation_agent.
+    """
+
+    response = state.get("assistant_response")
+
+    if response is None:
+        response = state.get("response")
+
+    if response is None:
+        response = (
+            "Hello. How can I help you?"
+        )
+
+    return {
+        **state,
+        "assistant_response": response,
+        "response": response,
+    }
+
+
+# =============================================================
 # Build Graph
 # =============================================================
 
 def build_triage_graph(llm_service=None):
-
+    
     graph = StateGraph(TriageState)
 
-    # ---------------------------------------------------------
+    # =========================================================
     # Nodes
+    # =========================================================
+
+    # ---------------------------------------------------------
+    # Session
     # ---------------------------------------------------------
 
     graph.add_node(
         "session",
         session_agent,
     )
+
+    # ---------------------------------------------------------
+    # Conversation / Intent Detection
+    # ---------------------------------------------------------
 
     graph.add_node(
         "conversation",
@@ -205,20 +248,39 @@ def build_triage_graph(llm_service=None):
         ),
     )
 
+    # ---------------------------------------------------------
+    # General Conversation
+    # ---------------------------------------------------------
+
     graph.add_node(
         "general_conversation",
-        general_conversation,
+        lambda state: general_conversation_agent(
+            state,
+            llm_service=llm_service,
+        ),
     )
+
+    # ---------------------------------------------------------
+    # Symptom Analysis
+    # ---------------------------------------------------------
 
     graph.add_node(
         "symptom_analysis",
         symptom_agent,
     )
 
+    # ---------------------------------------------------------
+    # Planner
+    # ---------------------------------------------------------
+
     graph.add_node(
         "planner",
         planner_agent,
     )
+
+    # ---------------------------------------------------------
+    # Risk Assessment
+    # ---------------------------------------------------------
 
     graph.add_node(
         "risk_assessment",
@@ -228,39 +290,53 @@ def build_triage_graph(llm_service=None):
         ),
     )
 
+    # ---------------------------------------------------------
+    # Debug
+    # ---------------------------------------------------------
+
     graph.add_node(
         "debug_risk",
         debug_risk_state,
     )
+
+    # ---------------------------------------------------------
+    # Supervisor
+    # ---------------------------------------------------------
 
     graph.add_node(
         "supervisor",
         supervisor_agent,
     )
 
+    # ---------------------------------------------------------
+    # Persistence
+    # ---------------------------------------------------------
+
     graph.add_node(
         "persistence",
         persistence_agent,
     )
 
-    # ---------------------------------------------------------
-    # Entry
-    # ---------------------------------------------------------
+    # =========================================================
+    # Entry Point
+    # =========================================================
 
-    graph.set_entry_point("session")
+    graph.set_entry_point(
+        "session"
+    )
 
-    # ---------------------------------------------------------
-    # Session → Conversation
-    # ---------------------------------------------------------
+    # =========================================================
+    # Session -> Conversation
+    # =========================================================
 
     graph.add_edge(
         "session",
         "conversation",
     )
 
-    # ---------------------------------------------------------
-    # Conversation → Intent
-    # ---------------------------------------------------------
+    # =========================================================
+    # Conversation -> Intent Router
+    # =========================================================
 
     graph.add_conditional_edges(
         "conversation",
@@ -271,78 +347,103 @@ def build_triage_graph(llm_service=None):
         },
     )
 
-    # ---------------------------------------------------------
-    # General → END
-    # ---------------------------------------------------------
+    # =========================================================
+    # GENERAL -> END
+    # =========================================================
 
     graph.add_edge(
         "general_conversation",
         END,
     )
 
-    # ---------------------------------------------------------
-    # Symptom → Planner
-    # ---------------------------------------------------------
+    # =========================================================
+    # TRIAGE
+    # =========================================================
 
     graph.add_edge(
         "symptom_analysis",
         "planner",
     )
 
-    # ---------------------------------------------------------
-    # Planner → Risk / END
-    # ---------------------------------------------------------
+    # =========================================================
+    # Planner -> Risk / Ask
+    # =========================================================
 
     graph.add_conditional_edges(
         "planner",
-        check_information,
+        route_planner,
         {
-            "incomplete": END,
-            "complete": "risk_assessment",
+            "risk": "risk_assessment",
+            "ask": END,
         },
     )
 
-    # ---------------------------------------------------------
-    # Risk → Debug
-    # ---------------------------------------------------------
+    # =========================================================
+    # Risk -> Debug
+    # =========================================================
 
     graph.add_edge(
         "risk_assessment",
         "debug_risk",
     )
 
-    # ---------------------------------------------------------
-    # Debug → Supervisor
-    # ---------------------------------------------------------
+    # =========================================================
+    # Debug -> Supervisor
+    # =========================================================
 
     graph.add_edge(
         "debug_risk",
         "supervisor",
     )
 
-    # ---------------------------------------------------------
-    # Supervisor → Persistence
-    # ---------------------------------------------------------
+    # =========================================================
+    # Supervisor -> Persistence
+    # =========================================================
 
     graph.add_edge(
         "supervisor",
         "persistence",
     )
 
-    # ---------------------------------------------------------
-    # Persistence → END
-    # ---------------------------------------------------------
+    # =========================================================
+    # Persistence -> END
+    # =========================================================
 
     graph.add_edge(
         "persistence",
         END,
     )
 
+    # =========================================================
+    # Compile
+    # =========================================================
+
     return graph.compile()
 
 
 # =============================================================
-# Default Graph
+# LLM Configuration
 # =============================================================
 
-triage_graph = build_triage_graph()
+llm_config = LLMConfig(
+    provider="ollama",
+    model="gemma3",
+)
+
+
+# =============================================================
+# LLM Service
+# =============================================================
+
+llm_service = create_llm(
+    llm_config,
+)
+
+
+# =============================================================
+# Global Graph
+# =============================================================
+
+triage_graph = build_triage_graph(
+    llm_service=llm_service,
+)

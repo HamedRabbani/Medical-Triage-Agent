@@ -1,5 +1,9 @@
 from typing import TypedDict
 
+from application.contracts.short_term_memory import (
+    ShortTermMemory,
+)
+
 
 class TriageState(TypedDict, total=False):
 
@@ -58,13 +62,25 @@ class TriageState(TypedDict, total=False):
     supervisor_status: str | None
 
     # =====================================================
-    # Conversation / Persistence
+    # Conversation
     # =====================================================
 
     conversation_history: list[dict]
-    result_id: int | None
-
 
     intent: str | None
     intent_confidence: float | None
+
     assistant_response: str | None
+    response: str | None
+
+    # =====================================================
+    # Persistence
+    # =====================================================
+
+    result_id: int | None
+
+    # =====================================================
+    # Memory
+    # =====================================================
+
+    short_term_memory: ShortTermMemory | None

@@ -5,6 +5,10 @@ from application.services.triage_service import TriageService
 from application.services.triage_agent_service import TriageAgentService
 from application.services.conversation_service import ConversationService
 
+from application.services.short_term_memory_service import (
+    ShortTermMemoryService,
+)
+
 
 def session_agent(state):
     """Create or reuse triage session, save user message,
@@ -33,6 +37,9 @@ def session_agent(state):
 
         conversation_service = ConversationService(
             uow
+        )
+        memory_service = ShortTermMemoryService(
+        conversation_service
         )
 
         # -------------------------
@@ -63,10 +70,8 @@ def session_agent(state):
         # 3. Load conversation history
         # -------------------------
 
-        conversation_history = (
-            conversation_service.get_history(
-                session_id
-            )
+        short_term_memory = memory_service.load(
+        session_id
         )
 
     # -------------------------
@@ -76,5 +81,6 @@ def session_agent(state):
     return {
         **state,
         "session_id": session_id,
-        "conversation_history": conversation_history,
+        "conversation_history": short_term_memory.recent_messages,
+        "short_term_memory": short_term_memory,
     }

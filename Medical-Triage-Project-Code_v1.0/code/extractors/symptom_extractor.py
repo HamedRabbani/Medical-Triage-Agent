@@ -1,154 +1,429 @@
 import re
 
-SYMPTOM_PATTERNS = {
+from utils.text_normalizer import normalize_text
+
+
+# =============================================================
+# Symptom Patterns
+# =============================================================
+#
+# Canonical symptom name -> possible user expressions
+#
+# The extractor returns canonical English names.
+# The input can be Persian or English.
+# =============================================================
+
+SYMPTOM_PATTERNS: dict[str, list[str]] = {
+
+    # ---------------------------------------------------------
+    # Cardiovascular
+    # ---------------------------------------------------------
 
     "chest pain": [
         "chest pain",
-        "chest hurts",
+        "chest ache",
         "pain in my chest",
+        "pain on my chest",
         "درد قفسه سینه",
-        "قفسه سینم درد میکنه",
         "درد قفسه سینه دارم",
-        "احساس فشار در قفسه سینه",
-        "احساس فشار در قفسه سینه دارم",
-        "احساس سوزش در قفسه سینه دارم",
-        "احساس سوزش در قفسه سینه",
-        "در سینم احساس سوزش دارم",
-        "احساس گرفتگی در قفسه سینه دارم",
-        "احساس گرفتگی در قفسه سینه",
-        "احساس پری در قفسه سینه دارم",
-        "احساس پُری در قفسه سینه دارم",
-        "درد قفسه سینه دارم",
+        "درد سینه",
+        "سینه درد",
         "قفسه سینم درد میکنه",
-        "قفسه سینم درد داره",
-        "قفسه سینم درد میکنه",
-        "سینم درد میکنه",
-
+        "قفسه سینم درد می کنه",
+        "قفسه سینه ام درد میکنه",
+        "قفسه سینه ام درد می کنه",
+        "درد در قفسه سینه",
     ],
+
+    "chest pressure": [
+        "chest pressure",
+        "pressure in my chest",
+        "pressure on my chest",
+        "فشار روی قفسه سینه",
+        "فشار روی سینه",
+        "احساس فشار در قفسه سینه",
+        "احساس فشار روی قفسه سینه",
+    ],
+
+    "palpitations": [
+        "palpitations",
+        "heart palpitations",
+        "heart racing",
+        "racing heart",
+        "تپش قلب",
+        "قلبم تند میزنه",
+        "قلبم تند می زنه",
+        "تند زدن قلب",
+    ],
+
+    # ---------------------------------------------------------
+    # Respiratory
+    # ---------------------------------------------------------
 
     "shortness of breath": [
         "shortness of breath",
         "difficulty breathing",
+        "trouble breathing",
         "hard to breathe",
+        "can't breathe",
+        "cannot breathe",
+        "breathing difficulty",
         "تنگی نفس",
-        "تنگی نفس دارم",
-        "احساس نفس تنگی دارم",
-        "احساس نفس تنگی",
-        "سخت نفس میکشم",
-        "به سختی نفس میکشم",
-        "نفس کشیدن مشکله",
-        "نفس کشیدن برام مشکله",
-        "نفس کشیدن برام سخته",
-        "سخت نفس کشیدن",
-        "نفس کشیدن برام راحت نیست",
-        "نفس کشیدن راحت نیست برام",
-        "خوب نمیتونم نفس بکشم",
-        "به خوبی نفس نمیکشم",
-        "به خوبی نمیتونم نفس بکشم",
-        "نفس کشیدن مشکل شده برام",
+        "تنگ نفس",
         "نفس تنگی",
+        "نفس کم میارم",
+        "نفس کم می آورم",
         "سخت نفس میکشم",
         "سخت نفس می کشم",
+        "نمی تونم نفس بکشم",
+        "نمیتونم نفس بکشم",
     ],
+
+    "cough": [
+        "cough",
+        "coughing",
+        "سرفه",
+        "سرفه دارم",
+        "سرفه میکنم",
+        "سرفه می کنم",
+    ],
+
+    "wheezing": [
+        "wheezing",
+        "wheeze",
+        "خس خس",
+        "خس خس سینه",
+        "خس خس میکنم",
+        "خس خس می کنم",
+    ],
+
+    # ---------------------------------------------------------
+    # Neurological
+    # ---------------------------------------------------------
 
     "headache": [
         "headache",
-        "my head hurts",
+        "head pain",
+        "سر درد",
         "سردرد",
         "سرم درد میکنه",
         "سرم درد می کنه",
-        "درد سر",
-        "سردرد دارم",
-        "درد سر دارم",
-        "سرم داره می‌ترکه",
-        "سرم درد گرفته",
-        "سرم اذیتم می‌کنه",
-        "سرم سنگین شده",
-        "سرم خیلی سنگینه",
-        "دچار سردرد شده‌ام",
-        "علائم سردرد دارم",
-        "درد در ناحیه جمجمه احساس می‌کنم",
-        "پشت سرم درد می‌کنه",
-        "پیشونیم درد می‌کنه",
-        "درد شدید توی سرم دارم",
-        "انگار یه چیزی توی سرم فشار میاره",
-        "چند ساعته سرم درد می‌کنه",
-        "چند روزه سرم درد می‌کنه",
-        "از صبح با سردرد بیدار شدم",
-        "از دیشب سردرد دارم",
-    
     ],
+
+    "dizziness": [
+        "dizziness",
+        "dizzy",
+        "feeling dizzy",
+        "سرگیجه",
+        "سرم گیج میره",
+        "سرم گیج می رود",
+        "سرم گیج میره",
+        "احساس سرگیجه",
+    ],
+
+    "fainting": [
+        "fainting",
+        "fainted",
+        "passed out",
+        "loss of consciousness",
+        "غش",
+        "غش کردم",
+        "بیهوش شدم",
+        "از حال رفتم",
+        "از هوش رفتم",
+    ],
+
+    "confusion": [
+        "confusion",
+        "confused",
+        "mental confusion",
+        "گیجی",
+        "گیج هستم",
+        "گیج شدم",
+        "اختلال هوشیاری",
+        "حواس پرتی شدید",
+    ],
+
+    # ---------------------------------------------------------
+    # Gastrointestinal
+    # ---------------------------------------------------------
+
+    "abdominal pain": [
+        "abdominal pain",
+        "stomach pain",
+        "belly pain",
+        "pain in my abdomen",
+        "درد شکم",
+        "دل درد",
+        "شکم درد",
+        "درد معده",
+        "معده ام درد میکنه",
+        "معده ام درد می کنه",
+        "شکمم درد میکنه",
+        "شکمم درد می کنه",
+    ],
+
+    "nausea": [
+        "nausea",
+        "nauseous",
+        "feeling nauseous",
+        "تهوع",
+        "حالت تهوع",
+        "حالم تهوع داره",
+        "حالت تهوع دارم",
+    ],
+
+    "vomiting": [
+        "vomiting",
+        "vomit",
+        "throwing up",
+        "استفراغ",
+        "بالا آوردن",
+        "بالا آوردم",
+        "استفراغ کردم",
+    ],
+
+    "diarrhea": [
+        "diarrhea",
+        "loose stool",
+        "اسهال",
+        "مدفوع شل",
+    ],
+
+    # ---------------------------------------------------------
+    # Pain
+    # ---------------------------------------------------------
+
+    "back pain": [
+        "back pain",
+        "pain in my back",
+        "درد کمر",
+        "کمر درد",
+        "کمرم درد میکنه",
+        "کمرم درد می کنه",
+    ],
+
+    "neck pain": [
+        "neck pain",
+        "pain in my neck",
+        "درد گردن",
+        "گردن درد",
+        "گردنم درد میکنه",
+        "گردنم درد می کنه",
+    ],
+
+    # ---------------------------------------------------------
+    # General
+    # ---------------------------------------------------------
 
     "fever": [
         "fever",
         "high temperature",
         "تب",
         "تب دارم",
-        "تب دارم",
-        "من تب کردم",
-        "احساس تب دارم",
-        "بدنم داغ شده",
-        "دمای بدنم بالاست",
-        "حرارت بدنم زیاد شده",
-        "تب کردم و بدنم می‌لرزه",
-        "از دیشب تب دارم",
-        "چند ساعته تب دارم",
-        "حس می‌کنم تب دارم",
-        "پیشونیم خیلی گرمه",
-        "بدنم گر گرفته",
-        "داغ شدم",
-        "تب بالا دارم",
-        "تب شدید دارم",
-        "تب و لرز دارم",
-        "تب",
         "تب کردم",
-        "احساس تب",
-        "بدن داغ",
-        "دمای بدن بالا",
-        "حرارت بدن زیاد",
-        "تب و لرز",
-        "بدن گر گرفته",
-        "گرگرفتگی",
         "تب بالا",
-        "تب شدید",
-        "پیشانی گرم",
-        "افزایش دمای بدن",
     ],
 
-    "dizziness": [
-        "dizziness",
-        "dizzy",
-        "سرگیجه",
-        "سرم گیج میره",
-        "سرم گیج می رود",
-        "سرگیجه دارم",
-        "سرم گیج میره",
-        "احساس سرگیجه",
-        "سرگیجه",
-        "احساس چرخش سر",
-        "دنیا دور سرم میچرخه",
-        "حس می‌کنم تعادلم رو از دست میدم",
-        "تعادلم به هم خورده",
-        "سبکی سر دارم",
-        "احساس سبکی سر",
-        "سرم سبک شده",
-        "حالت گیجی دارم",
-        "گیج میشم",
-        "احساس می‌کنم زمین می‌چرخه",
-        "عدم تعادل دارم",
+    "fatigue": [
+        "fatigue",
+        "tired",
+        "very tired",
+        "extreme tiredness",
+        "خستگی",
+        "خسته ام",
+        "خیلی خسته ام",
+        "احساس خستگی",
+    ],
+
+    "weakness": [
+        "weakness",
+        "weak",
+        "feeling weak",
+        "ضعف",
+        "ضعف دارم",
+        "احساس ضعف",
+        "بی حالی",
+        "بی حالم",
+        "بی حالی شدید",
+    ],
+
+    "swelling": [
+        "swelling",
+        "swollen",
+        "تورم",
+        "ورم",
+        "ورم کرده",
+        "متورم",
     ],
 }
 
 
+# =============================================================
+# Internal Helpers
+# =============================================================
+
+def _normalize_for_matching(text: str) -> str:
+    """
+    Normalize user input before symptom matching.
+    """
+
+    if not isinstance(text, str):
+        return ""
+
+    normalized = normalize_text(text)
+
+    # Normalize common Persian character variants.
+    normalized = (
+        normalized
+        .replace("ي", "ی")
+        .replace("ى", "ی")
+        .replace("ك", "ک")
+        .replace("ۀ", "ه")
+        .replace("ة", "ه")
+    )
+
+    # Normalize Arabic/Persian punctuation.
+    normalized = re.sub(
+        r"[،؛؟]+",
+        " ",
+        normalized,
+    )
+
+    # Normalize English punctuation.
+    normalized = re.sub(
+        r"[,.!?;:]+",
+        " ",
+        normalized,
+    )
+
+    # Collapse multiple spaces.
+    normalized = re.sub(
+        r"\s+",
+        " ",
+        normalized,
+    )
+
+    return normalized.strip()
 
 
-def extract_symptoms(text):
+def _phrase_matches(
+    text: str,
+    phrase: str,
+) -> bool:
+    """
+    Safely determine whether a symptom phrase exists
+    in the normalized text.
 
-    symptoms = []
+    For multi-word phrases:
+        substring matching is acceptable.
+
+    For short single words:
+        word-boundary matching prevents false positives.
+
+    Example:
+
+        "کمک"
+
+    must not match:
+
+        "کم"
+    """
+
+    phrase = phrase.strip().lower()
+
+    if not phrase:
+        return False
+
+    # ---------------------------------------------------------
+    # Multi-word phrase
+    # ---------------------------------------------------------
+
+    if " " in phrase:
+        return phrase in text
+
+    # ---------------------------------------------------------
+    # Single word
+    # ---------------------------------------------------------
+
+    # Persian words do not always behave perfectly with
+    # Python's \b, so use whitespace-aware boundaries.
+    pattern = rf"(?<!\S){re.escape(phrase)}(?!\S)"
+
+    return re.search(pattern, text) is not None
+
+
+# =============================================================
+# Main Extractor
+# =============================================================
+
+def extract_symptoms(text: str) -> list[str]:
+    """
+    Extract canonical symptoms from user text.
+
+    Parameters
+    ----------
+    text:
+        User message in Persian or English.
+
+    Returns
+    -------
+    list[str]
+        Canonical symptom names.
+
+    Examples
+    --------
+    >>> extract_symptoms("درد قفسه سینه دارم")
+    ['chest pain']
+
+    >>> extract_symptoms(
+    ...     "درد قفسه سینه دارم و تنگی نفس"
+    ... )
+    ['chest pain', 'shortness of breath']
+
+    >>> extract_symptoms("Hello, how are you?")
+    []
+    """
+
+    if not isinstance(text, str):
+        return []
+
+    normalized_text = _normalize_for_matching(text)
+
+    if not normalized_text:
+        return []
+
+    detected_symptoms: list[str] = []
+
+    # =========================================================
+    # Match patterns
+    # =========================================================
 
     for symptom, patterns in SYMPTOM_PATTERNS.items():
 
-        if any(pattern in text for pattern in patterns):
-            symptoms.append(symptom)
+        for pattern in patterns:
 
-    return symptoms
+            normalized_pattern = _normalize_for_matching(
+                pattern
+            )
+
+            if not normalized_pattern:
+                continue
+
+            if _phrase_matches(
+                normalized_text,
+                normalized_pattern,
+            ):
+                detected_symptoms.append(symptom)
+
+                # Once a canonical symptom is found,
+                # no need to check its remaining aliases.
+                break
+
+    # =========================================================
+    # Remove duplicates while preserving order
+    # =========================================================
+
+    return list(
+        dict.fromkeys(detected_symptoms)
+    )

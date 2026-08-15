@@ -1,119 +1,96 @@
-from unittest.mock import Mock
-
-from application.contracts.conversation_extraction import (
-    ConversationExtraction,
-)
-from application.contracts.conversation_intent import (
-    ConversationIntent,
-)
-from application.contracts.general_conversation_response import (
-    GeneralConversationResponse,
-)
 from agents.conversation_agent import conversation_agent
 
 
-def test_triage_intent_extracts_medical_information():
+def test_general_greeting():
 
     state = {
-        "user_message": (
-            "I have severe chest pain "
-            "and shortness of breath."
-        ),
+        "user_message": "سلام خوبی؟",
+        "intent": None,
         "symptoms": [],
-        "severity": None,
         "age": None,
         "duration": None,
-        "red_flags": [],
-    }
-
-    mock_llm = Mock()
-
-    mock_llm.generate_structured.side_effect = [
-
-        ConversationIntent(
-            intent="TRIAGE",
-            confidence=0.99,
-        ),
-
-        ConversationExtraction(
-            intent="TRIAGE",
-            symptoms=[
-                "chest pain",
-                "shortness of breath",
-            ],
-            severity="severe",
-            age=None,
-            duration=None,
-            red_flags=[],
-        ),
-    ]
-
-    result = conversation_agent(
-        state,
-        llm_service=mock_llm,
-    )
-
-    assert result["intent"] == "TRIAGE"
-
-    assert result["intent_confidence"] == 0.99
-
-    assert "chest pain" in result["symptoms"]
-
-    assert (
-        "shortness of breath"
-        in result["symptoms"]
-    )
-
-    assert result["severity"] == "severe"
-
-    assert (
-        mock_llm.generate_structured.call_count
-        == 2
-    )
-
-
-def test_general_intent_generates_general_response():
-
-    state = {
-        "user_message": "سلام، حالت چطوره؟",
-        "symptoms": [],
         "severity": None,
-        "age": None,
-        "duration": None,
-        "red_flags": [],
+        "missing_information": [],
+        "next_question": None,
+        "risk_level": None,
     }
 
-    mock_llm = Mock()
-
-    mock_llm.generate_structured.side_effect = [
-
-        ConversationIntent(
-            intent="GENERAL",
-            confidence=0.99,
-        ),
-
-        GeneralConversationResponse(
-            response="Hello. How can I help you?"
-        ),
-    ]
-
-    result = conversation_agent(
-        state,
-        llm_service=mock_llm,
-    )
+    result = conversation_agent(state)
 
     assert result["intent"] == "GENERAL"
 
-    assert result["intent_confidence"] == 0.99
 
-    assert (
-        result["assistant_response"]
-        == "Hello. How can I help you?"
-    )
+def test_general_help_request():
 
-    assert result["symptoms"] == []
+    state = {
+        "user_message": "میتونی کمکم کنی؟",
+        "intent": None,
+        "symptoms": [],
+        "age": None,
+        "duration": None,
+        "severity": None,
+        "missing_information": [],
+        "next_question": None,
+        "risk_level": None,
+    }
 
-    assert (
-        mock_llm.generate_structured.call_count
-        == 2
-    )
+    result = conversation_agent(state)
+
+    assert result["intent"] == "GENERAL"
+
+
+def test_chest_pain_is_triage():
+
+    state = {
+        "user_message": "درد قفسه سینه دارم",
+        "intent": None,
+        "symptoms": [],
+        "age": None,
+        "duration": None,
+        "severity": None,
+        "missing_information": [],
+        "next_question": None,
+        "risk_level": None,
+    }
+
+    result = conversation_agent(state)
+
+    assert result["intent"] == "TRIAGE"
+
+
+def test_shortness_of_breath_is_triage():
+
+    state = {
+        "user_message": "نفس تنگی دارم",
+        "intent": None,
+        "symptoms": [],
+        "age": None,
+        "duration": None,
+        "severity": None,
+        "missing_information": [],
+        "next_question": None,
+        "risk_level": None,
+    }
+
+    result = conversation_agent(state)
+
+    assert result["intent"] == "TRIAGE"
+
+
+def test_triage_followup_stays_triage():
+
+    state = {
+        "user_message": "29",
+        "intent": "TRIAGE",
+        "symptoms": ["chest pain"],
+        "age": None,
+        "duration": None,
+        "severity": None,
+        "missing_information": ["age"],
+        "next_question": "چند سال دارید؟",
+        "risk_level": None,
+    }
+
+    result = conversation_agent(state)
+
+    assert result["intent"] == "TRIAGE"
