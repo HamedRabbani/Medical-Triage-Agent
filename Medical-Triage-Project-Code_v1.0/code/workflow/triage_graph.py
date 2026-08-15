@@ -131,3 +131,79 @@ graph.add_edge(
 
 
 triage_graph = graph.compile()
+
+
+def build_triage_graph(llm_service=None):
+
+    graph = StateGraph(TriageState)
+
+    graph.add_node(
+        "session",
+        session_agent,
+    )
+
+    graph.add_node(
+        "symptom_analysis",
+        lambda state: symptom_agent(
+            state,
+            llm_service=llm_service,
+        ),
+    )
+
+    graph.add_node(
+        "planner",
+        planner_agent,
+    )
+
+    graph.add_node(
+        "risk_assessment",
+        risk_agent,
+    )
+
+    graph.add_node(
+        "supervisor",
+        supervisor_agent,
+    )
+
+    graph.add_node(
+        "persistence",
+        persistence_agent,
+    )
+
+    graph.set_entry_point("session")
+
+    graph.add_edge(
+        "session",
+        "symptom_analysis",
+    )
+
+    graph.add_edge(
+        "symptom_analysis",
+        "planner",
+    )
+
+    graph.add_conditional_edges(
+        "planner",
+        check_information,
+        {
+            "incomplete": END,
+            "complete": "risk_assessment",
+        },
+    )
+
+    graph.add_edge(
+        "risk_assessment",
+        "supervisor",
+    )
+
+    graph.add_edge(
+        "supervisor",
+        "persistence",
+    )
+
+    graph.add_edge(
+        "persistence",
+        END,
+    )
+
+    return graph.compile()

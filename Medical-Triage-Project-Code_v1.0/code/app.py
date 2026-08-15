@@ -85,14 +85,14 @@ if user_message:
     current_state
     )
 
-    st.write("DEBUG - Conversation History")
+    # st.write("DEBUG - Conversation History")
 
-    st.json(
-        result.get(
-            "conversation_history",
-            []
-        )
-    )
+    # st.json(
+    #     result.get(
+    #         "conversation_history",
+    #         []
+    #     )
+    # )
 
     
     st.session_state.triage_state = result

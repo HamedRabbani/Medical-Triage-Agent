@@ -1,3 +1,5 @@
+# infrastructure/llm/llm_factory.py
+
 from application.config.llm_config import LLMConfig
 from application.ports.llm_port import LLMPort
 
@@ -8,6 +10,7 @@ from infrastructure.llm.ollama_adapter import OllamaAdapter
 def create_llm(config: LLMConfig) -> LLMPort:
 
     if config.provider == "gemini":
+
         if not config.api_key:
             raise ValueError("Gemini API key is required.")
 
@@ -17,6 +20,7 @@ def create_llm(config: LLMConfig) -> LLMPort:
         )
 
     if config.provider == "ollama":
+
         return OllamaAdapter(
             model=config.model,
             host=config.host or "http://localhost:11434",
