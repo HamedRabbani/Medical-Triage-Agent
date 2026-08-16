@@ -150,5 +150,5 @@ def test_render_login_authenticates_valid_user():
 
     assert st.session_state.authenticated is True
     assert st.session_state.user_id == 10
-    assert st.session_state.user_email == "doctor@example.com"
-    assert st.session_state.user_roles == ("Doctor",)
+    assert st.session_state.email == "doctor@example.com"
+    assert st.session_state.roles == ["doctor"]

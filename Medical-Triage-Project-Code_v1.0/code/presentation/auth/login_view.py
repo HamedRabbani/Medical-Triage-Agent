@@ -1,5 +1,9 @@
 import streamlit as st
 
+from application.services.patient_service import (
+    PatientService,
+)
+
 from infrastructure.auth.auth_factory import (
     create_login_service,
 )
@@ -8,8 +12,8 @@ from infrastructure.database.session import (
     SessionLocal,
 )
 
-from infrastructure.database.repositories.patient_repository import (
-    PatientRepository,
+from infrastructure.database.unit_of_work import (
+    UnitOfWork,
 )
 
 
@@ -25,14 +29,13 @@ def render_login() -> bool:
         ↓
     Resolve Roles
         ↓
-    Resolve PatientProfile only for Patient role
+    PatientService for Patient users
         ↓
     Streamlit Session State
     """
 
     st.title("Medical AI Triage")
     st.subheader("Login / ورود")
-
 
     # ========================================================
     # Login Form
@@ -55,10 +58,8 @@ def render_login() -> bool:
             use_container_width=True,
         )
 
-
     if not submitted:
         return False
-
 
     if not email.strip() or not password:
 
@@ -68,15 +69,11 @@ def render_login() -> bool:
 
         return False
 
-
     # ========================================================
     # Authenticate
     # ========================================================
 
-    login_service, session = (
-        create_login_service()
-    )
-
+    login_service, session = create_login_service()
 
     try:
 
@@ -89,8 +86,6 @@ def render_login() -> bool:
 
         session.close()
 
-
-
     if not result.success:
 
         st.error(
@@ -99,8 +94,6 @@ def render_login() -> bool:
         )
 
         return False
-
-
 
     # ========================================================
     # Normalize Roles
@@ -111,26 +104,19 @@ def render_login() -> bool:
         for role in (result.roles or [])
     ]
 
-
     # ========================================================
     # Default Session State
     # ========================================================
 
     st.session_state.authenticated = True
 
-    st.session_state.user_id = (
-        result.user_id
-    )
+    st.session_state.user_id = result.user_id
 
-    st.session_state.email = (
-        result.email
-    )
+    st.session_state.email = result.email
 
     st.session_state.roles = roles
 
     st.session_state.patient_id = None
-
-
 
     # ========================================================
     # Patient Profile Resolution
@@ -139,32 +125,21 @@ def render_login() -> bool:
 
     if "patient" in roles:
 
-
         patient_session = SessionLocal()
-
 
         try:
 
-            patient_repository = (
-                PatientRepository(
-                    patient_session
-                )
+            uow = UnitOfWork(patient_session)
+
+            patient_service = PatientService(uow)
+
+            patient = patient_service.get_patient_by_user(
+                result.user_id
             )
-
-
-            patient = (
-                patient_repository
-                .get_by_user_id(
-                    result.user_id
-                )
-            )
-
 
         finally:
 
             patient_session.close()
-
-
 
         if patient is None:
 
@@ -177,12 +152,9 @@ def render_login() -> bool:
 
             return False
 
-
-
         st.session_state.patient_id = (
             patient.patient_id
         )
-
 
     # ========================================================
     # Login Success
@@ -192,8 +164,6 @@ def render_login() -> bool:
         "Login successful."
     )
 
-
     st.rerun()
-
 
     return True
