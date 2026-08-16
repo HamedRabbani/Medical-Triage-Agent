@@ -35,8 +35,8 @@ def test_database_integration() -> None:
                 first_name="hamed",
                 last_name="rabbani",
                 date_of_birth=datetime(1995, 1, 1),
-                gender="Unknown",
-                national_id="hamed-rabbani-001",
+                gender="Male",
+                national_id=f"T{uuid.uuid4().hex[:18]}",
                 created_at=datetime.now(UTC),
             )
 

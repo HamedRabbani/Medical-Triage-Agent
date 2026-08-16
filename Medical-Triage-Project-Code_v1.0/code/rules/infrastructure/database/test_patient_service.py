@@ -1,6 +1,24 @@
+from types import SimpleNamespace
+
+from application.auth.authorization_service import (
+    AuthorizationService,
+)
+from application.services.patient_service import PatientService
 from infrastructure.database.session import SessionLocal
 from infrastructure.database.unit_of_work import UnitOfWork
-from application.services.patient_service import PatientService
+
+
+def make_user(role: str, user_id: int):
+    return SimpleNamespace(
+        user_id=user_id,
+        user_roles=[
+            SimpleNamespace(
+                role=SimpleNamespace(
+                    role_name=role,
+                ),
+            )
+        ],
+    )
 
 
 def test_patient_service() -> None:
@@ -13,26 +31,37 @@ def test_patient_service() -> None:
 
         print(f"Total patients: {len(patients)}")
 
-        if patients:
-            patient = service.get_patient(
-                patients[0].patient_id
-            )
+        if not patients:
+            return
 
-            print(
-                f"Patient: "
-                f"{patient.first_name} "
-                f"{patient.last_name}"
-            )
+        patient = patients[0]
 
-            patient_by_user = service.get_patient_by_user(
-                patient.user_id
-            )
+        user = make_user(
+            AuthorizationService.PATIENT,
+            patient.user_id,
+        )
 
-            print(
-                f"Patient by user: "
-                f"{patient_by_user.first_name} "
-                f"{patient_by_user.last_name}"
-            )
+        result = service.get_patient(
+            user,
+            patient.patient_id,
+        )
+
+        assert result is not None
+        assert result.patient_id == patient.patient_id
+
+        patient_by_user = service.get_patient_by_user(
+            user,
+            patient.user_id,
+        )
+
+        assert patient_by_user is not None
+        assert patient_by_user.patient_id == patient.patient_id
+
+        print(
+            f"Patient: "
+            f"{result.first_name} "
+            f"{result.last_name}"
+        )
 
         print("Patient service test passed.")
 

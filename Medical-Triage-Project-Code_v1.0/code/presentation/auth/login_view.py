@@ -1,3 +1,4 @@
+
 import streamlit as st
 
 from application.services.patient_service import (
@@ -23,15 +24,15 @@ def render_login() -> bool:
 
     Authentication flow:
 
-    UserAccount
-        ↓
-    LoginService
-        ↓
-    Resolve Roles
-        ↓
-    PatientService for Patient users
-        ↓
-    Streamlit Session State
+        UserAccount
+            ↓
+        LoginService
+            ↓
+        Resolve Roles
+            ↓
+        PatientService for Patient users
+            ↓
+        Streamlit Session State
     """
 
     st.title("Medical AI Triage")
@@ -116,6 +117,7 @@ def render_login() -> bool:
 
     st.session_state.roles = roles
 
+    # Always initialize patient_id
     st.session_state.patient_id = None
 
     # ========================================================
@@ -133,13 +135,17 @@ def render_login() -> bool:
 
             patient_service = PatientService(uow)
 
-            patient = patient_service.get_patient_by_user(
+            patient = patient_service.get_patient_by_user_id(
                 result.user_id
             )
 
         finally:
 
             patient_session.close()
+
+        # ----------------------------------------------------
+        # Patient profile must exist
+        # ----------------------------------------------------
 
         if patient is None:
 
@@ -152,9 +158,50 @@ def render_login() -> bool:
 
             return False
 
+        # ----------------------------------------------------
+        # Store Patient ID
+        # ----------------------------------------------------
+
         st.session_state.patient_id = (
             patient.patient_id
         )
+
+    # ========================================================
+    # Authentication Context Validation
+    # ========================================================
+
+    if "patient" in roles:
+
+        if st.session_state.patient_id is None:
+
+            st.session_state.authenticated = False
+
+            st.error(
+                "Patient authentication context could not "
+                "be initialized."
+            )
+
+            return False
+
+    # ========================================================
+    # DEBUG
+    # Temporary: remove after confirming the flow
+    # ========================================================
+
+    st.write(
+        "DEBUG user_id:",
+        st.session_state.get("user_id"),
+    )
+
+    st.write(
+        "DEBUG patient_id:",
+        st.session_state.get("patient_id"),
+    )
+
+    st.write(
+        "DEBUG roles:",
+        st.session_state.get("roles"),
+    )
 
     # ========================================================
     # Login Success
@@ -167,3 +214,4 @@ def render_login() -> bool:
     st.rerun()
 
     return True
+

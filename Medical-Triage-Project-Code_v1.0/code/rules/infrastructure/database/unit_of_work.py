@@ -6,6 +6,7 @@ from .repositories.medical_record_repository import (
     MedicalRecordRepository,
 )
 from .repositories.triage_repository import TriageRepository
+from .repositories.doctor_repository import DoctorRepository
 
 
 class UnitOfWork:
@@ -16,6 +17,7 @@ class UnitOfWork:
 
         self.users = UserRepository(session)
         self.patients = PatientRepository(session)
+        self.doctors = DoctorRepository(session)
         self.medical_records = MedicalRecordRepository(session)
         self.triage = TriageRepository(session)
 

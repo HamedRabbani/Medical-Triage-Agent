@@ -1,9 +1,28 @@
+from types import SimpleNamespace
+
+from application.auth.authorization_service import (
+    AuthorizationService,
+)
+from application.services.patient_service import PatientService
 from infrastructure.database.session import SessionLocal
 from infrastructure.database.unit_of_work import UnitOfWork
-from application.services.patient_service import PatientService
 
 
-def test_patient_service() -> None:
+def make_user(role: str, user_id: int):
+    return SimpleNamespace(
+        user_id=user_id,
+        user_roles=[
+            SimpleNamespace(
+                role=SimpleNamespace(
+                    role_name=role,
+                ),
+            )
+        ],
+    )
+
+
+def test_patient_service_patient_can_access_own_profile() -> None:
+
     with SessionLocal() as session:
 
         uow = UnitOfWork(session)
@@ -11,31 +30,103 @@ def test_patient_service() -> None:
 
         patients = uow.patients.get_all()
 
-        print(f"Total patients: {len(patients)}")
+        if not patients:
+            return
 
-        if patients:
-            patient = service.get_patient(
-                patients[0].patient_id
-            )
+        patient = patients[0]
 
-            print(
-                f"Patient: "
-                f"{patient.first_name} "
-                f"{patient.last_name}"
-            )
+        user = make_user(
+            AuthorizationService.PATIENT,
+            patient.user_id,
+        )
 
-            patient_by_user = service.get_patient_by_user(
-                patient.user_id
-            )
+        result = service.get_patient(
+            user,
+            patient.patient_id,
+        )
 
-            print(
-                f"Patient by user: "
-                f"{patient_by_user.first_name} "
-                f"{patient_by_user.last_name}"
-            )
-
-        print("Patient service test passed.")
+        assert result is not None
+        assert result.patient_id == patient.patient_id
 
 
-if __name__ == "__main__":
-    test_patient_service()
+def test_patient_service_patient_cannot_access_another_patient() -> None:
+
+    with SessionLocal() as session:
+
+        uow = UnitOfWork(session)
+        service = PatientService(uow)
+
+        patients = uow.patients.get_all()
+
+        if len(patients) < 2:
+            return
+
+        target_patient = patients[1]
+
+        user = make_user(
+            AuthorizationService.PATIENT,
+            patients[0].user_id,
+        )
+
+        result = service.get_patient(
+            user,
+            target_patient.patient_id,
+        )
+
+        assert result is None
+
+
+def test_patient_service_get_by_user_allows_own_profile() -> None:
+
+    with SessionLocal() as session:
+
+        uow = UnitOfWork(session)
+        service = PatientService(uow)
+
+        patients = uow.patients.get_all()
+
+        if not patients:
+            return
+
+        patient = patients[0]
+
+        user = make_user(
+            AuthorizationService.PATIENT,
+            patient.user_id,
+        )
+
+        result = service.get_patient_by_user(
+            user,
+            patient.user_id,
+        )
+
+        assert result is not None
+        assert result.patient_id == patient.patient_id
+
+
+def test_patient_service_get_by_user_rejects_another_patient() -> None:
+
+    with SessionLocal() as session:
+
+        uow = UnitOfWork(session)
+        service = PatientService(uow)
+
+        patients = uow.patients.get_all()
+
+        if len(patients) < 2:
+            return
+
+        current_patient = patients[0]
+        target_patient = patients[1]
+
+        user = make_user(
+            AuthorizationService.PATIENT,
+            current_patient.user_id,
+        )
+
+        result = service.get_patient_by_user(
+            user,
+            target_patient.user_id,
+        )
+
+        assert result is None

@@ -75,8 +75,35 @@ def test_patient_can_access_patient_data():
     user = make_user("Patient")
 
     assert AuthorizationService.can_access_patient_data(
-        user
+        user,
+        patient_user_id=10,
+        target_patient_user_id=10,
     )
+
+def test_patient_can_access_own_patient_data():
+
+    user = make_user("Patient")
+
+    assert AuthorizationService.can_access_patient_data(
+        user,
+        patient_user_id=10,
+        target_patient_user_id=10,
+    )
+
+
+def test_patient_cannot_access_another_patient_data():
+
+    user = make_user("Patient")
+
+    assert not AuthorizationService.can_access_patient_data(
+        user,
+        patient_user_id=10,
+        target_patient_user_id=20,
+    )
+
+
+
+
 
 
 def test_patient_cannot_manage_patient_data():
@@ -117,4 +144,58 @@ def test_only_system_admin_can_manage_roles():
 
     assert AuthorizationService.can_manage_roles(
         admin
+    )
+
+def test_doctor_can_access_patient_data():
+
+    user = make_user("Doctor")
+
+    assert AuthorizationService.can_access_patient_data(
+        user,
+        patient_user_id=20,
+        target_patient_user_id=20,
+    )
+
+
+def test_doctor_cannot_access_another_doctor_data():
+
+    user = make_user("Doctor")
+
+    assert not AuthorizationService.can_access_doctor_data(
+        user,
+        doctor_user_id=10,
+        target_doctor_user_id=20,
+    )
+
+
+def test_hospital_admin_can_access_patient_data():
+
+    user = make_user("HospitalAdmin")
+
+    assert AuthorizationService.can_access_patient_data(
+        user,
+        patient_user_id=10,
+        target_patient_user_id=20,
+    )
+
+
+def test_system_admin_can_access_patient_data():
+
+    user = make_user("SystemAdmin")
+
+    assert AuthorizationService.can_access_patient_data(
+        user,
+        patient_user_id=10,
+        target_patient_user_id=20,
+    )
+
+
+def test_system_admin_can_access_doctor_data():
+
+    user = make_user("SystemAdmin")
+
+    assert AuthorizationService.can_access_doctor_data(
+        user,
+        doctor_user_id=10,
+        target_doctor_user_id=20,
     )

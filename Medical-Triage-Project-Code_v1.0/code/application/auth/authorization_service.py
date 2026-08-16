@@ -91,25 +91,91 @@ class AuthorizationService:
         )
 
     # =========================================================
-    # Permission Checks
+    # Patient Data Access
     # =========================================================
 
     @staticmethod
-    def can_access_patient_data(user) -> bool:
+    def can_access_patient_data(
+        user,
+        patient_user_id: int | None = None,
+        target_patient_user_id: int | None = None,
+    ) -> bool:
         """
         Determine whether the user may access
-        patient-related data.
+        the requested patient's data.
+
+        Patients may access only their own data.
+
+        Doctors, Hospital Admins, and System Admins
+        may access patient data according to their role.
         """
 
+        if user is None:
+            return False
+
+        # Patient → own data only
+        if AuthorizationService.has_role(
+            user,
+            AuthorizationService.PATIENT,
+        ):
+            return (
+                patient_user_id is not None
+                and target_patient_user_id is not None
+                and patient_user_id == target_patient_user_id
+            )
+
+        # Staff roles → patient data
         return AuthorizationService.has_any_role(
             user,
             [
-                AuthorizationService.PATIENT,
                 AuthorizationService.DOCTOR,
                 AuthorizationService.HOSPITAL_ADMIN,
                 AuthorizationService.SYSTEM_ADMIN,
             ],
         )
+
+    # =========================================================
+    # Doctor Data Access
+    # =========================================================
+
+    @staticmethod
+    def can_access_doctor_data(
+        user,
+        doctor_user_id: int | None = None,
+        target_doctor_user_id: int | None = None,
+    ) -> bool:
+        """
+        Determine whether the user may access
+        the requested doctor's data.
+
+        Doctors may access only their own data.
+
+        System Admins may access doctor data.
+        """
+
+        if user is None:
+            return False
+
+        # Doctor → own data only
+        if AuthorizationService.has_role(
+            user,
+            AuthorizationService.DOCTOR,
+        ):
+            return (
+                doctor_user_id is not None
+                and target_doctor_user_id is not None
+                and doctor_user_id == target_doctor_user_id
+            )
+
+        # System Admin → doctor data
+        return AuthorizationService.has_role(
+            user,
+            AuthorizationService.SYSTEM_ADMIN,
+        )
+
+    # =========================================================
+    # Patient Data Management
+    # =========================================================
 
     @staticmethod
     def can_manage_patient_data(user) -> bool:
@@ -127,6 +193,10 @@ class AuthorizationService:
             ],
         )
 
+    # =========================================================
+    # User Management
+    # =========================================================
+
     @staticmethod
     def can_manage_users(user) -> bool:
         """
@@ -140,6 +210,10 @@ class AuthorizationService:
                 AuthorizationService.SYSTEM_ADMIN,
             ],
         )
+
+    # =========================================================
+    # Role Management
+    # =========================================================
 
     @staticmethod
     def can_manage_roles(user) -> bool:
