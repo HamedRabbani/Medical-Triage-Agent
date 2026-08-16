@@ -18,94 +18,40 @@ from application.config.llm_config import LLMConfig
 from infrastructure.llm.llm_factory import create_llm
 
 
-
 # =============================================================
 # Intent Router
 # =============================================================
 
 def route_intent(state):
 
-    """
-    Decide conversation flow.
-
-    GENERAL:
-        Normal conversation
-        Admin/Doctor without patient context
-
-    TRIAGE:
-        Patient medical assessment
-    """
-
-
-    intent = state.get(
-        "intent"
-    )
-
-
-    roles = [
-        str(role).lower()
-        for role in state.get(
-            "user_roles",
-            []
-        )
-    ]
-
-
-    patient_id = state.get(
-        "patient_id"
-    )
-
+    intent = str(
+        state.get("intent") or ""
+    ).upper()
 
     # ---------------------------------------------------------
-    # Explicit TRIAGE request
+    # Active triage context has priority over GENERAL
+    # ---------------------------------------------------------
+
+    if (
+        state.get("symptoms")
+        or state.get("missing_information")
+        or state.get("next_question") is not None
+    ):
+        return "triage"
+
+    # ---------------------------------------------------------
+    # Explicit TRIAGE
     # ---------------------------------------------------------
 
     if intent == "TRIAGE":
-
-
-        # Admin / Doctor without selected patient
-        if (
-            "patient" not in roles
-            and patient_id is None
-        ):
-
-            return "general"
-
-
         return "triage"
 
-
-
     # ---------------------------------------------------------
-    # Explicit GENERAL request
+    # Explicit GENERAL
     # ---------------------------------------------------------
 
     if intent == "GENERAL":
-
         return "general"
-
-
-
-    # ---------------------------------------------------------
-    # Existing symptom context
-    # ---------------------------------------------------------
-
-    if state.get(
-        "symptoms"
-    ):
-
-
-        if (
-            "patient" in roles
-            and patient_id is not None
-        ):
-
-            return "triage"
-
-
-        return "general"
-
-
 
     # ---------------------------------------------------------
     # Default
@@ -114,32 +60,27 @@ def route_intent(state):
     return "general"
 
 
-
-
-
 # =============================================================
 # Planner Router
 # =============================================================
 
 def route_planner(state):
 
+    if state.get(
+        "immediate_high_risk",
+        False,
+    ):
+        return "risk"
+
     missing_information = (
-        state.get(
-            "missing_information"
-        )
+        state.get("missing_information")
         or []
     )
 
-
     if missing_information:
-
         return "ask"
 
-
     return "risk"
-
-
-
 
 
 # =============================================================
@@ -157,9 +98,6 @@ def general_conversation(
     )
 
 
-
-
-
 # =============================================================
 # Debug Node
 # =============================================================
@@ -170,40 +108,26 @@ def debug_risk_state(state):
         "\n========== RISK DEBUG =========="
     )
 
-
     print(
         "Risk:",
-        state.get(
-            "risk_level"
-        )
+        state.get("risk_level"),
     )
-
 
     print(
         "Confidence:",
-        state.get(
-            "confidence"
-        )
+        state.get("confidence"),
     )
-
 
     print(
         "Recommendation:",
-        state.get(
-            "recommendation"
-        )
+        state.get("recommendation"),
     )
-
 
     print(
         "================================\n"
     )
 
-
     return state
-
-
-
 
 
 # =============================================================
@@ -214,17 +138,26 @@ def build_triage_graph(
     llm_service=None,
 ):
 
-
     graph = StateGraph(
         TriageState
     )
 
+    # =========================================================
+    # Session
+    #
+    # Session must be created before intent routing.
+    # GENERAL conversations also belong to a conversation
+    # session and therefore require a session_id.
+    # =========================================================
 
+    graph.add_node(
+        "session",
+        session_agent,
+    )
 
     # =========================================================
-    # Nodes
+    # Conversation
     # =========================================================
-
 
     graph.add_node(
         "conversation",
@@ -235,7 +168,9 @@ def build_triage_graph(
             ),
     )
 
-
+    # =========================================================
+    # General Conversation
+    # =========================================================
 
     graph.add_node(
         "general_conversation",
@@ -246,29 +181,19 @@ def build_triage_graph(
             ),
     )
 
-
-
-    # -------------------------
-    # Triage only
-    # -------------------------
-
-    graph.add_node(
-        "session",
-        session_agent,
-    )
-
+    # =========================================================
+    # Triage
+    # =========================================================
 
     graph.add_node(
         "symptom_analysis",
         symptom_agent,
     )
 
-
     graph.add_node(
         "planner",
         planner_agent,
     )
-
 
     graph.add_node(
         "risk_assessment",
@@ -279,134 +204,99 @@ def build_triage_graph(
             ),
     )
 
-
     graph.add_node(
         "debug_risk",
         debug_risk_state,
     )
-
 
     graph.add_node(
         "supervisor",
         supervisor_agent,
     )
 
-
     graph.add_node(
         "persistence",
         persistence_agent,
     )
 
-
-
-
     # =========================================================
     # Entry
     # =========================================================
 
-
     graph.set_entry_point(
-        "conversation"
+        "session"
     )
 
+    # =========================================================
+    # Session -> Conversation
+    # =========================================================
 
+    graph.add_edge(
+        "session",
+        "conversation",
+    )
 
     # =========================================================
     # Intent Routing
     # =========================================================
 
-
     graph.add_conditional_edges(
         "conversation",
-
         route_intent,
-
         {
-            "triage":
-                "session",
-
-            "general":
-                "general_conversation",
+            "triage": "symptom_analysis",
+            "general": "general_conversation",
         },
     )
-
-
 
     # =========================================================
     # GENERAL FLOW
     # =========================================================
-
 
     graph.add_edge(
         "general_conversation",
         END,
     )
 
-
-
     # =========================================================
     # TRIAGE FLOW
     # =========================================================
 
-
-    graph.add_edge(
-        "session",
-        "symptom_analysis",
-    )
-
-
     graph.add_edge(
         "symptom_analysis",
         "planner",
     )
-
-
 
     graph.add_conditional_edges(
         "planner",
-
         route_planner,
-
         {
-            "ask":
-                END,
-
-            "risk":
-                "risk_assessment",
+            "ask": END,
+            "risk": "risk_assessment",
         },
     )
-
-
 
     graph.add_edge(
         "risk_assessment",
         "debug_risk",
     )
 
-
     graph.add_edge(
         "debug_risk",
         "supervisor",
     )
 
-
     graph.add_edge(
         "supervisor",
         "persistence",
     )
-
 
     graph.add_edge(
         "persistence",
         END,
     )
 
-
-
     return graph.compile()
-
-
-
 
 
 # =============================================================
@@ -419,12 +309,9 @@ llm_config = LLMConfig(
 )
 
 
-
 llm_service = create_llm(
     llm_config
 )
-
-
 
 
 # =============================================================

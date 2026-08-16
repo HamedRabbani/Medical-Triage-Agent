@@ -1,111 +1,99 @@
 import re
 
+from utils.text_normalizer import normalize_text
 
-def extract_severity(text: str) -> str | None:
-    """
-    Extract symptom severity from text.
 
-    The extractor avoids substring false positives.
-    For example:
+SEVERITY_PATTERNS = {
+    "severe": [
+        r"\bsevere\b",
+        r"\bvery\s+severe\b",
+        r"\bvery\s+painful\b",
+        r"\bterrible\b",
+        r"\ba\s+lot\b",
 
-        "کمک می‌کنی؟"
+        r"(?<![\w\u0600-\u06FF])شدید(?![\w\u0600-\u06FF])",
+        r"خیلی\s+شدید",
+        r"خیلی\s+زیاده",
+        r"خیلی\s+زیاد(?:\s+است)?",
+        r"خیلی\s+درد\s+دارم",
+        r"دردم\s+شدیده",
+        r"(?<![\w\u0600-\u06FF])زیاد(?![\w\u0600-\u06FF])",
+    ],
 
-    must NOT be interpreted as:
+    "moderate": [
+        r"\bmoderate\b",
+        r"\bmedium\b",
 
-        severity = mild
+        r"(?<![\w\u0600-\u06FF])متوسط(?![\w\u0600-\u06FF])",
+        r"(?<![\w\u0600-\u06FF])معمولی(?![\w\u0600-\u06FF])",
+        r"نه\s+کم\s+نه\s+زیاد",
+    ],
 
-    because "کم" is part of the word "کمک".
-    """
+    "mild": [
+        r"\bmild\b",
+        r"\bslight\b",
+        r"\ba\s+little\b",
 
-    if not isinstance(text, str):
+        r"(?<![\w\u0600-\u06FF])خفیف(?![\w\u0600-\u06FF])",
+        r"(?<![\w\u0600-\u06FF])کم(?![\w\u0600-\u06FF])",
+        r"یه\s+کم",
+        r"(?<![\w\u0600-\u06FF])کمی(?![\w\u0600-\u06FF])",
+    ],
+}
+
+
+def extract_severity(text):
+
+    if not isinstance(
+        text,
+        str,
+    ):
         return None
 
-    text = text.strip().lower()
+    text = normalize_text(
+        text
+    )
 
-    # =========================================================
-    # Severe
-    # =========================================================
-
-    severe_phrases = [
-        "very severe",
-        "very painful",
-        "خیلی زیاد است",
-        "خیلی زیاد",
-        "خیلی زیاده",
-        "خیلی شدید",
-        "خیلی درد دارم",
-        "دردم شدیده",
-        "severe",
-        "terrible",
-        "شدید",
-        "a lot",
-        "زیاد",
-        "زیاده",
-    ]
-
-    for phrase in severe_phrases:
-        if phrase in text:
-            return "severe"
+    if not text:
+        return None
 
     # =========================================================
     # Moderate
     # =========================================================
 
-    moderate_phrases = [
-        "نه کم نه زیاد",
-        "moderate",
-        "medium",
-        "متوسط",
-        "معمولی",
-    ]
+    for pattern in SEVERITY_PATTERNS["moderate"]:
 
-    for phrase in moderate_phrases:
-        if phrase in text:
+        if re.search(
+            pattern,
+            text,
+            flags=re.IGNORECASE,
+        ):
             return "moderate"
+
+    # =========================================================
+    # Severe
+    # =========================================================
+
+    for pattern in SEVERITY_PATTERNS["severe"]:
+
+        if re.search(
+            pattern,
+            text,
+            flags=re.IGNORECASE,
+        ):
+            return "severe"
 
     # =========================================================
     # Mild
     # =========================================================
 
-    mild_phrases = [
-        "a little",
-        "slight",
-        "mild",
-        "یه کم",
-        "کمی",
-        "خفیف",
-        "کم درد",
-        "درد کم",
-        "درد کمی",
-    ]
+    for pattern in SEVERITY_PATTERNS["mild"]:
 
-    for phrase in mild_phrases:
-        if phrase in text:
+        if re.search(
+            pattern,
+            text,
+            flags=re.IGNORECASE,
+        ):
             return "mild"
-
-    # =========================================================
-    # Exact Persian word "کم"
-    # =========================================================
-    #
-    # Do NOT use:
-    #
-    #     "کم" in text
-    #
-    # because it matches:
-    #
-    #     کمک
-    #     کمکی
-    #
-    # =========================================================
-
-    if re.search(r"(?<!\S)کم(?!\S)", text):
-        return "mild"
-
-    # =========================================================
-    # English exact word
-    # =========================================================
-
-    if re.search(r"\bmild\b", text):
-        return "mild"
 
     return None

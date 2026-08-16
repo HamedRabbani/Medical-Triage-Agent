@@ -3,10 +3,15 @@ def planner_agent(state):
     Determine which patient information is missing.
 
     The planner reports missing information.
-    It does NOT decide whether risk assessment must stop.
+
+    It does NOT decide whether risk assessment should stop.
     """
 
     missing = []
+
+    # =========================================================
+    # Required Information
+    # =========================================================
 
     if state.get("age") is None:
         missing.append("age")
@@ -19,6 +24,10 @@ def planner_agent(state):
 
     if state.get("severity") is None:
         missing.append("severity")
+
+    # =========================================================
+    # Questions
+    # =========================================================
 
     questions = {
         "age": (
@@ -42,10 +51,51 @@ def planner_agent(state):
     next_question = None
 
     if missing:
-        next_question = questions[missing[0]]
+
+        next_question = questions[
+            missing[0]
+        ]
+
+    # =========================================================
+    # Immediate High-Risk Detection
+    #
+    # Do NOT remove next_question.
+    # route_planner decides whether to skip it.
+    # =========================================================
+
+    symptoms = list(
+        state.get("symptoms")
+        or []
+    )
+
+    severity = state.get(
+        "severity"
+    )
+
+    immediate_high_risk = False
+
+    if (
+        "chest pain" in symptoms
+        and "shortness of breath" in symptoms
+    ):
+        immediate_high_risk = True
+
+    if (
+        "loss of consciousness"
+        in symptoms
+    ):
+        immediate_high_risk = True
+
+    if severity == "severe":
+        immediate_high_risk = True
+
+    # =========================================================
+    # Return
+    # =========================================================
 
     return {
         **state,
         "missing_information": missing,
         "next_question": next_question,
+        "immediate_high_risk": immediate_high_risk,
     }
