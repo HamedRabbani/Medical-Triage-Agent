@@ -1,24 +1,28 @@
 import os
 
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from sqlalchemy.engine import URL
 
 
-DATABASE_URL = URL.create(
-    "mssql+pyodbc",
-    username="medical_app",
-    password="Hamed/.@#123",
-    host="localhost",
-    database="MedicalTriageDB",
-    query={
-        "driver": "ODBC Driver 18 for SQL Server",
-        "TrustServerCertificate": "yes",
-    },
+# Load environment variables
+load_dotenv()
+
+
+# SQL Server connection string
+DATABASE_URL = os.getenv(
+    "DATABASE_URL"
 )
 
 
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL is not configured."
+    )
+
+
+# Create SQLAlchemy engine
 engine = create_engine(
     DATABASE_URL,
-    echo=False,
+    echo=True,
     pool_pre_ping=True,
 )
