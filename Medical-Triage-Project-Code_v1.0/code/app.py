@@ -1,6 +1,7 @@
 import streamlit as st
 
 from workflow.triage_graph import triage_graph
+from presentation.auth.login_view import render_login
 
 
 # ============================================================
@@ -16,359 +17,411 @@ st.set_page_config(
 
 
 # ============================================================
+# Authentication
+# ============================================================
+
+if not st.session_state.get(
+    "authenticated",
+    False,
+):
+
+    if not render_login():
+        st.stop()
+
+
+
+# ============================================================
 # Initial State
 # ============================================================
 
 def create_initial_state():
-    """
-    Create a clean initial workflow state.
-
-    The structure must remain compatible with TriageState.
-    """
 
     return {
-        # ----------------------------------------------------
-        # Patient / Session
-        # ----------------------------------------------------
-        "patient_id": 2,
+
+        # Authentication Context
+
+        "user_id": st.session_state.get(
+            "user_id"
+        ),
+
+        "patient_id": st.session_state.get(
+            "patient_id"
+        ),
+
+        "user_roles": st.session_state.get(
+            "roles",
+            []
+        ),
+
+
+        # Session
+
         "session_id": None,
 
-        # ----------------------------------------------------
+
         # Input
-        # ----------------------------------------------------
+
         "user_message": "",
 
-        # ----------------------------------------------------
-        # Patient Information
-        # ----------------------------------------------------
+
+        # Patient Data
+
         "age": None,
+
         "symptoms": [],
-        "severity": None,
+
         "duration": None,
 
-        # ----------------------------------------------------
-        # Rule-Based Risk Assessment
-        # ----------------------------------------------------
+        "severity": None,
+
+
+        # Risk
+
         "red_flags": [],
+
         "risk_level": None,
+
         "confidence": None,
+
         "recommendation": None,
 
-        # ----------------------------------------------------
+
         # Planner
-        # ----------------------------------------------------
+
         "missing_information": [],
+
         "next_question": None,
 
-        # ----------------------------------------------------
-        # LLM Risk Assessment
-        # ----------------------------------------------------
-        "llm_risk_level": None,
-        "llm_confidence": None,
-        "llm_red_flags": [],
-        "llm_recommendation": None,
 
-        # ----------------------------------------------------
-        # Supervisor
-        # ----------------------------------------------------
-        "supervisor_status": None,
-
-        # ----------------------------------------------------
         # Conversation
-        # ----------------------------------------------------
+
         "conversation_history": [],
+
         "intent": None,
+
         "intent_confidence": None,
+
         "assistant_response": None,
 
-        # ----------------------------------------------------
+        "response": None,
+
+
+        # Supervisor
+
+        "supervisor_status": None,
+
+
         # Persistence
-        # ----------------------------------------------------
+
         "result_id": None,
 
-        # ----------------------------------------------------
+
         # Memory
-        # ----------------------------------------------------
+
         "short_term_memory": None,
     }
 
 
+
 # ============================================================
-# Streamlit Session Initialization
+# Session Initialization
 # ============================================================
 
 if "triage_state" not in st.session_state:
-    st.session_state.triage_state = create_initial_state()
+
+    st.session_state.triage_state = (
+        create_initial_state()
+    )
 
 
 if "messages" not in st.session_state:
+
     st.session_state.messages = []
 
 
-if "asked_questions" not in st.session_state:
-    st.session_state.asked_questions = set()
-
 
 # ============================================================
-# Helper Functions
+# Helpers
 # ============================================================
 
 def reset_assessment():
-    """
-    Completely reset the current assessment.
-    """
 
-    st.session_state.triage_state = create_initial_state()
+    st.session_state.triage_state = (
+        create_initial_state()
+    )
+
     st.session_state.messages = []
-    st.session_state.asked_questions = set()
 
 
-def add_message(role: str, content: str):
-    """
-    Add a message to the Streamlit UI history.
 
-    Empty messages are ignored.
-    """
+def logout():
+
+    keys = [
+
+        "authenticated",
+
+        "user_id",
+
+        "email",
+
+        "roles",
+
+        "patient_id",
+
+        "triage_state",
+
+        "messages",
+
+    ]
+
+
+    for key in keys:
+
+        st.session_state.pop(
+            key,
+            None,
+        )
+
+
+
+def add_message(
+    role,
+    content,
+):
 
     if not content:
         return
 
-    content = str(content).strip()
-
-    if not content:
-        return
 
     st.session_state.messages.append(
         {
             "role": role,
-            "content": content,
+            "content": str(content),
         }
     )
 
 
-def show_assistant_message(content: str):
-    """
-    Render an assistant message.
-    """
 
-    if not content:
-        return
+def show_assistant_message(
+    content,
+):
 
-    with st.chat_message("assistant"):
-        st.markdown(content)
+    if content:
 
+        with st.chat_message(
+            "assistant"
+        ):
 
-def normalize_question(question):
-    """
-    Normalize a question for duplicate detection.
-    """
-
-    if not question:
-        return ""
-
-    return " ".join(
-        str(question)
-        .strip()
-        .lower()
-        .split()
-    )
-
-
-def should_show_question(question):
-    """
-    Prevent the same question from being displayed repeatedly.
-    """
-
-    normalized = normalize_question(question)
-
-    if not normalized:
-        return False
-
-    if normalized in st.session_state.asked_questions:
-        return False
-
-    st.session_state.asked_questions.add(
-        normalized
-    )
-
-    return True
-
-
-def get_progress(state):
-    """
-    Calculate required triage information progress.
-    """
-
-    required_fields = [
-        state.get("age"),
-        state.get("symptoms"),
-        state.get("duration"),
-        state.get("severity"),
-    ]
-
-    completed = sum(
-        bool(value)
-        for value in required_fields
-    )
-
-    total = len(required_fields)
-
-    return completed, total
-
-
-def is_triage_complete(state):
-    """
-    Determine whether all required information exists.
-    """
-
-    completed, total = get_progress(state)
-
-    return completed == total
-
-
-def build_triage_response(state):
-    """
-    Build the final triage assessment message.
-    """
-
-    risk = state.get("risk_level")
-    confidence = state.get("confidence")
-    supervisor = state.get("supervisor_status")
-    recommendation = state.get("recommendation")
-
-    lines = []
-
-    if risk:
-        lines.append(
-            f"**Risk Level:** {risk}"
-        )
-
-    if confidence is not None:
-        try:
-            confidence_value = float(confidence)
-
-            # Support both:
-            # 0.85 -> 85%
-            # 85   -> 85%
-            if confidence_value <= 1:
-                confidence_value *= 100
-
-            lines.append(
-                f"**Confidence:** {confidence_value:.0f}%"
+            st.markdown(
+                content
             )
 
-        except (TypeError, ValueError):
-            lines.append(
-                f"**Confidence:** {confidence}"
-            )
-
-    if supervisor:
-        formatted_supervisor = (
-            str(supervisor)
-            .replace("_", " ")
-            .title()
-        )
-
-        lines.append(
-            f"**Supervisor:** {formatted_supervisor}"
-        )
-
-    if recommendation:
-        lines.append(
-            f"**Recommendation:** {recommendation}"
-        )
-
-    if not lines:
-        return None
-
-    return "\n\n".join(lines)
 
 
-def build_collected_data(state):
-    """
-    Build collected patient information.
-    """
-
-    age = state.get("age")
-    symptoms = state.get("symptoms") or []
-    duration = state.get("duration")
-    severity = state.get("severity")
-
-    return {
-        "age": (
-            str(age)
-            if age is not None
-            else "Not provided"
-        ),
-        "symptoms": (
-            ", ".join(symptoms)
-            if symptoms
-            else "None"
-        ),
-        "duration": (
-            str(duration)
-            if duration
-            else "Not provided"
-        ),
-        "severity": (
-            str(severity)
-            if severity
-            else "Not provided"
-        ),
-    }
-
-
-def display_question(question):
-    """
-    Display a new question only once.
-    """
-
-    if not question:
-        return
-
-    if not should_show_question(question):
-        return
-
-    add_message(
-        "assistant",
-        question,
-    )
-
-    show_assistant_message(
-        question
-    )
-
-
-def display_general_response(response):
-    """
-    Display general conversation response.
-    """
+def display_general_response(
+    response,
+):
 
     if not response:
+
         response = (
-            "من اینجا هستم تا کمکتان کنم. "
-            "چطور می‌توانم به شما کمک کنم؟"
+            "من اینجا هستم تا کمک کنم."
         )
+
 
     add_message(
         "assistant",
         response,
     )
 
+
     show_assistant_message(
         response
     )
 
 
+
+def display_question(
+    question,
+):
+
+    if not question:
+        return
+
+
+    add_message(
+        "assistant",
+        question,
+    )
+
+
+    show_assistant_message(
+        question
+    )
+
+
+
+# ============================================================
+# Triage Result Formatter
+# ============================================================
+
+def build_triage_response(state):
+
+    lines = []
+
+
+    # -------------------------
+    # Risk
+    # -------------------------
+
+    if state.get("risk_level"):
+
+        lines.append(
+            f"**Risk Level:** "
+            f"{state['risk_level']}"
+        )
+
+
+    if state.get("confidence") is not None:
+
+        confidence = state["confidence"]
+
+
+        if (
+            isinstance(confidence, float)
+            and confidence <= 1
+        ):
+
+            confidence = (
+                f"{confidence * 100:.0f}%"
+            )
+
+
+        lines.append(
+            f"**Confidence:** "
+            f"{confidence}"
+        )
+
+
+
+    # -------------------------
+    # Red Flags
+    # -------------------------
+
+    if state.get("red_flags"):
+
+        lines.append(
+            "**Red Flags:**\n"
+            +
+            "\n".join(
+                [
+                    f"- {item}"
+                    for item in state["red_flags"]
+                ]
+            )
+        )
+
+
+
+    # -------------------------
+    # Recommendation
+    # -------------------------
+
+    if state.get("recommendation"):
+
+        lines.append(
+            f"**Recommendation:** "
+            f"{state['recommendation']}"
+        )
+
+
+
+    # -------------------------
+    # Supervisor
+    # -------------------------
+
+    if state.get("supervisor_status"):
+
+        lines.append(
+            f"**Supervisor:** "
+            f"{state['supervisor_status']}"
+        )
+
+
+
+    # -------------------------
+    # Patient Summary
+    # -------------------------
+
+    patient_info = []
+
+
+    if state.get("age") is not None:
+
+        patient_info.append(
+            f"Age: {state['age']}"
+        )
+
+
+    if state.get("symptoms"):
+
+        patient_info.append(
+            "Symptoms: "
+            +
+            ", ".join(
+                state["symptoms"]
+            )
+        )
+
+
+    if state.get("duration"):
+
+        patient_info.append(
+            f"Duration: {state['duration']}"
+        )
+
+
+    if state.get("severity"):
+
+        patient_info.append(
+            f"Severity: {state['severity']}"
+        )
+
+
+    if patient_info:
+
+        lines.append(
+            "**Patient Information:**\n"
+            +
+            "\n".join(
+                [
+                    f"- {item}"
+                    for item in patient_info
+                ]
+            )
+        )
+
+
+
+    if not lines:
+
+        return None
+
+
+    return "\n\n".join(lines)
+
 # ============================================================
 # Header
 # ============================================================
 
-st.title("Medical AI Triage")
+st.title(
+    "Medical AI Triage"
+)
 
 st.caption(
     "Conversational medical triage prototype"
 )
+
 
 
 # ============================================================
@@ -378,325 +431,464 @@ st.caption(
 state = st.session_state.triage_state
 
 
+
 # ============================================================
 # Sidebar
 # ============================================================
 
 with st.sidebar:
 
-    st.header("Session")
 
-    session_id = state.get("session_id")
+    st.header(
+        "User"
+    )
 
-    if session_id is None:
-        st.info("No active session")
-    else:
+
+    st.write(
+        f"**Email:** "
+        f"{st.session_state.get('email')}"
+    )
+
+
+    st.write(
+        f"**User ID:** "
+        f"{st.session_state.get('user_id')}"
+    )
+
+
+    st.write(
+        f"**Patient ID:** "
+        f"{st.session_state.get('patient_id')}"
+    )
+
+
+    roles = st.session_state.get(
+        "roles",
+        []
+    )
+
+
+    if roles:
+
         st.write(
-            f"**Session ID:** {session_id}"
+            "**Roles:** "
+            +
+            ", ".join(
+                [
+                    str(role).title()
+                    for role in roles
+                ]
+            )
         )
 
-    st.divider()
+
 
     if st.button(
-        "شروع ارزیابی جدید / New Assessment",
+        "Logout",
         use_container_width=True,
     ):
-        reset_assessment()
+
+        logout()
+
         st.rerun()
 
+
+
     st.divider()
 
-    # --------------------------------------------------------
+
+
+    # ========================================================
+    # Session
+    # ========================================================
+
+    st.header(
+        "Session"
+    )
+
+
+    if state.get("session_id"):
+
+        st.write(
+            f"Session ID: "
+            f"{state['session_id']}"
+        )
+
+    else:
+
+        st.info(
+            "No active session"
+        )
+
+
+
+    st.divider()
+
+
+
+    if st.button(
+        "شروع ارزیابی جدید",
+        use_container_width=True,
+    ):
+
+        reset_assessment()
+
+        st.rerun()
+
+
+
+    st.divider()
+
+
+
+    # ========================================================
     # Current Assessment
-    # --------------------------------------------------------
+    # ========================================================
 
-    st.header("Current Assessment")
+    st.header(
+        "Current Assessment"
+    )
 
-    intent = state.get("intent")
 
-    if intent:
-        st.write(
-            f"**Intent:** {intent}"
-        )
-    else:
-        st.write(
-            "**Intent:** Pending"
-        )
+    st.write(
+        f"Intent: "
+        f"{state.get('intent') or 'Pending'}"
+    )
 
-    risk = state.get("risk_level")
 
-    if risk:
-        st.write(
-            f"**Risk:** {risk}"
-        )
-    else:
-        st.write(
-            "**Risk:** Pending"
-        )
+    st.write(
+        f"Risk: "
+        f"{state.get('risk_level') or 'Pending'}"
+    )
+
+
+
+    # ========================================================
+    # Assessment Progress
+    # ========================================================
 
     st.divider()
 
-    # --------------------------------------------------------
-    # Collected Data
-    # --------------------------------------------------------
 
-    st.header("Collected Data")
-
-    collected = build_collected_data(
-        state
+    st.header(
+        "Assessment Progress"
     )
 
-    st.write(
-        f"**Age:** {collected['age']}"
+
+    fields = [
+
+        (
+            "Age",
+            state.get("age") is not None
+        ),
+
+        (
+            "Symptoms",
+            bool(state.get("symptoms"))
+        ),
+
+        (
+            "Duration",
+            state.get("duration") is not None
+        ),
+
+        (
+            "Severity",
+            state.get("severity") is not None
+        ),
+
+    ]
+
+
+    completed = 0
+
+
+    for label, done in fields:
+
+
+        if done:
+
+            st.write(
+                f"✅ {label}"
+            )
+
+            completed += 1
+
+
+        else:
+
+            st.write(
+                f"⬜ {label}"
+            )
+
+
+
+    progress = (
+        completed /
+        len(fields)
     )
 
-    st.write(
-        f"**Symptoms:** {collected['symptoms']}"
-    )
-
-    st.write(
-        f"**Duration:** {collected['duration']}"
-    )
-
-    st.write(
-        f"**Severity:** {collected['severity']}"
-    )
-
-    completed, total = get_progress(
-        state
-    )
-
-    st.write(
-        f"**Information:** {completed}/{total}"
-    )
 
     st.progress(
-        completed / total
-        if total
-        else 0
+        progress
     )
+
+
+    st.caption(
+        f"{completed}/{len(fields)} "
+        "information collected"
+    )
+
+
 
     st.divider()
 
-    # --------------------------------------------------------
+
+
+    # ========================================================
     # Safety
-    # --------------------------------------------------------
+    # ========================================================
 
-    st.header("Safety")
-
-    st.caption(
-        "This is an AI-assisted triage prototype "
-        "and is not a replacement for professional "
-        "medical care."
+    st.header(
+        "Safety"
     )
 
 
+    st.caption(
+        "AI-assisted triage prototype. "
+        "Not a replacement for professional medical care."
+    )
+
+
+
+
+
 # ============================================================
-# Conversation
+# Conversation History
 # ============================================================
 
-st.subheader("Conversation")
+st.subheader(
+    "Conversation"
+)
+
 
 
 for message in st.session_state.messages:
 
-    role = message.get("role")
-    content = message.get("content")
+
+    role = message.get(
+        "role"
+    )
+
+
+    content = message.get(
+        "content"
+    )
+
 
     if not content:
         continue
 
-    if role not in ("user", "assistant"):
-        continue
 
-    with st.chat_message(role):
-        st.markdown(content)
+    with st.chat_message(
+        role
+    ):
+
+        st.markdown(
+            content
+        )
+
+
+
 
 
 # ============================================================
-# User Input
+# Chat Input
 # ============================================================
 
 user_message = st.chat_input(
-    "علائم خود را توضیح دهید یا به سؤال پاسخ دهید..."
+    "علائم خود را توضیح دهید یا سؤال خود را بپرسید..."
 )
+
 
 
 if user_message:
 
-    user_message = user_message.strip()
-
-    if not user_message:
-        st.stop()
-
-    # --------------------------------------------------------
-    # Show User Message
-    # --------------------------------------------------------
 
     add_message(
         "user",
         user_message,
     )
 
-    with st.chat_message("user"):
-        st.markdown(user_message)
 
-    # --------------------------------------------------------
-    # Prepare State
-    # --------------------------------------------------------
+    with st.chat_message(
+        "user"
+    ):
+
+        st.markdown(
+            user_message
+        )
+
+
 
     current_state = dict(
         st.session_state.triage_state
     )
 
+
     current_state["user_message"] = (
         user_message
     )
 
-    # --------------------------------------------------------
-    # Invoke LangGraph
-    # --------------------------------------------------------
+
+    current_state["user_id"] = (
+        st.session_state.get(
+            "user_id"
+        )
+    )
+
+
+    current_state["patient_id"] = (
+        st.session_state.get(
+            "patient_id"
+        )
+    )
+
+
+    current_state["user_roles"] = (
+        st.session_state.get(
+            "roles",
+            []
+        )
+    )
+
+
+
+    # ========================================================
+    # Run Graph
+    # ========================================================
 
     try:
+
 
         result = triage_graph.invoke(
             current_state
         )
 
+
     except Exception as exc:
 
-        error_message = (
+
+        error = (
             "خطایی هنگام پردازش درخواست رخ داد.\n\n"
             f"`{type(exc).__name__}: {exc}`"
         )
 
+
         add_message(
             "assistant",
-            error_message,
+            error,
         )
 
-        with st.chat_message("assistant"):
-            st.error(error_message)
+
+        with st.chat_message(
+            "assistant"
+        ):
+
+            st.error(
+                error
+            )
+
 
         st.stop()
 
-    # --------------------------------------------------------
-    # Persist State
-    # --------------------------------------------------------
+
+
+    # ========================================================
+    # Save State
+    # ========================================================
 
     st.session_state.triage_state = result
 
     state = result
 
-    # --------------------------------------------------------
-    # Intent
-    # --------------------------------------------------------
 
-    intent = state.get("intent")
 
     # ========================================================
-    # GENERAL CONVERSATION
+    # Response Handling
     # ========================================================
+
+    intent = state.get(
+        "intent"
+    )
+
 
     if intent == "GENERAL":
 
-        response = state.get(
-            "assistant_response"
-        )
 
         display_general_response(
-            response
+            state.get(
+                "assistant_response"
+            )
         )
 
-    # ========================================================
-    # TRIAGE
-    # ========================================================
+
 
     elif intent == "TRIAGE":
 
-        missing_information = (
+
+        missing = (
             state.get(
                 "missing_information"
             )
             or []
         )
 
-        # ----------------------------------------------------
-        # Incomplete Assessment
-        # ----------------------------------------------------
 
-        if missing_information:
+        if missing:
 
-            question = state.get(
-                "next_question"
-            )
 
             display_question(
-                question
+                state.get(
+                    "next_question"
+                )
             )
 
-        # ----------------------------------------------------
-        # Complete Assessment
-        # ----------------------------------------------------
 
         else:
 
-            response = (
-                state.get(
-                    "assistant_response"
+
+            assessment = (
+                build_triage_response(
+                    state
                 )
             )
 
-            if response:
+
+            if assessment:
+
 
                 add_message(
                     "assistant",
-                    response,
+                    assessment,
                 )
+
 
                 show_assistant_message(
-                    response
+                    assessment
                 )
 
-            else:
 
-                assessment = (
-                    build_triage_response(
-                        state
-                    )
-                )
-
-                if assessment:
-
-                    add_message(
-                        "assistant",
-                        assessment,
-                    )
-
-                    show_assistant_message(
-                        assessment
-                    )
-
-    # ========================================================
-    # Unknown Intent
-    # ========================================================
 
     else:
 
-        fallback = (
-            "لطفاً درخواست یا علائم خود را "
-            "توضیح دهید.\n\n"
-            "Please describe your request or symptoms."
+
+        display_general_response(
+            "لطفاً درخواست خود را توضیح دهید."
         )
 
-        add_message(
-            "assistant",
-            fallback,
-        )
 
-        show_assistant_message(
-            fallback
-        )
+
 
 
 # ============================================================
@@ -704,6 +896,7 @@ if user_message:
 # ============================================================
 
 st.divider()
+
 
 st.caption(
     "Medical AI Triage Prototype — "

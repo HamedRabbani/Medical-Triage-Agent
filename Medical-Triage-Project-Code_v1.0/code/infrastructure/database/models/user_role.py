@@ -1,13 +1,30 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..base import Base
 
 
+if TYPE_CHECKING:
+    from .role import Role
+    from .user_account import UserAccount
+
+
 class UserRole(Base):
+    """
+    Association model between UserAccount and Role.
+
+    A user can have multiple roles and a role can belong
+    to multiple users.
+    """
+
     __tablename__ = "UserRole"
 
-    # Primary key
+    # =========================================================
+    # Primary Key
+    # =========================================================
+
     user_role_id: Mapped[int] = mapped_column(
         "UserRoleId",
         Integer,
@@ -15,31 +32,40 @@ class UserRole(Base):
         autoincrement=True,
     )
 
-    # Foreign key to UserAccount
+    # =========================================================
+    # Foreign Keys
+    # =========================================================
+
     user_id: Mapped[int] = mapped_column(
         "UserId",
         ForeignKey("UserAccount.UserId"),
         nullable=False,
     )
 
-    # Foreign key to Role
     role_id: Mapped[int] = mapped_column(
         "RoleId",
         ForeignKey("Role.RoleId"),
         nullable=False,
     )
 
-    # Related user
+    # =========================================================
+    # Relationships
+    # =========================================================
+
     user: Mapped["UserAccount"] = relationship(
+        "UserAccount",
         back_populates="user_roles",
     )
 
-    # Related role
     role: Mapped["Role"] = relationship(
+        "Role",
         back_populates="user_roles",
     )
 
-    # Prevent duplicate user-role assignments
+    # =========================================================
+    # Constraints
+    # =========================================================
+
     __table_args__ = (
         UniqueConstraint(
             "UserId",

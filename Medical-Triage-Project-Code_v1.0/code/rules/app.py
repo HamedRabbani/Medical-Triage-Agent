@@ -78,6 +78,17 @@ if user_message:
 
     current_state["user_message"] = user_message
 
+    current_state["user_id"] = (
+    st.session_state.get("user_id")
+    )
+
+    current_state["patient_id"] = (
+        st.session_state.get("patient_id")
+    )
+
+    current_state["skip_persistence"] = True
+
+
     result = triage_graph.invoke(
         current_state
     )

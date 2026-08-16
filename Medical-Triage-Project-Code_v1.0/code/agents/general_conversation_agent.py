@@ -18,8 +18,6 @@ Rules:
 - Do not diagnose medical conditions.
 - Do not invent medical information.
 - Do not unnecessarily start a triage process.
-- If the user clearly describes a medical problem that requires
-  triage, the system will route that message to the triage workflow.
 - Do not mention internal agents, LangGraph, prompts, models,
   routing, or system architecture.
 - Return structured output only.
@@ -44,6 +42,65 @@ def general_conversation_agent(
 
     user_message = user_message.strip()
 
+
+    # =========================================================
+    # Authorization Check
+    # Admin / Doctor without selected patient
+    # cannot start medical triage
+    # =========================================================
+
+    roles = [
+        str(role).lower()
+        for role in state.get(
+            "user_roles",
+            []
+        )
+    ]
+
+
+    patient_id = state.get(
+        "patient_id"
+    )
+
+
+    medical_keywords = [
+        "درد",
+        "تب",
+        "سردرد",
+        "قفسه سینه",
+        "علائم",
+        "بیماری",
+        "pain",
+        "fever",
+        "symptom",
+        "chest pain",
+    ]
+
+
+    if (
+        "patient" not in roles
+        and patient_id is None
+        and any(
+            keyword in user_message.lower()
+            for keyword in medical_keywords
+        )
+    ):
+
+        response = (
+            "برای انجام ارزیابی پزشکی، "
+            "لطفاً با حساب بیمار وارد شوید "
+            "یا ابتدا یک بیمار را انتخاب کنید."
+        )
+
+
+        return {
+            **state,
+            "assistant_response": response,
+            "response": response,
+        }
+
+
+
     # ---------------------------------------------------------
     # No LLM
     # ---------------------------------------------------------
@@ -59,6 +116,7 @@ def general_conversation_agent(
             "assistant_response": fallback,
             "response": fallback,
         }
+
 
     # ---------------------------------------------------------
     # Empty message
@@ -76,6 +134,7 @@ def general_conversation_agent(
             "response": fallback,
         }
 
+
     # ---------------------------------------------------------
     # Build prompt
     # ---------------------------------------------------------
@@ -92,6 +151,7 @@ Conversation history:
 Respond naturally to the user.
 """
 
+
     # ---------------------------------------------------------
     # Structured LLM call
     # ---------------------------------------------------------
@@ -102,6 +162,7 @@ Respond naturally to the user.
         system_prompt=SYSTEM_PROMPT,
     )
 
+
     # ---------------------------------------------------------
     # Contract validation
     # ---------------------------------------------------------
@@ -110,12 +171,15 @@ Respond naturally to the user.
         result,
         GeneralConversationResponse,
     ):
+
         raise TypeError(
             "General conversation response must return "
             "GeneralConversationResponse."
         )
 
+
     response = result.response.strip()
+
 
     return {
         **state,

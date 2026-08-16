@@ -1,31 +1,37 @@
-from datetime import datetime
-
-from sqlalchemy import DateTime, Integer, String, text
-
-from sqlalchemy import DateTime, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
-
-from ..base import Base
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy.orm import relationship
+from sqlalchemy import DateTime, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from ..base import Base
+
 
 if TYPE_CHECKING:
+    from .doctor_profile import DoctorProfile
+    from .patient_profile import PatientProfile
     from .user_role import UserRole
 
 
-from typing import TYPE_CHECKING
-
-from sqlalchemy.orm import relationship
-
-if TYPE_CHECKING:
-    from .patient_profile import PatientProfile
-    from .doctor_profile import DoctorProfile
-
 class UserAccount(Base):
+    """
+    ORM model for application user accounts.
+
+    Responsibilities:
+        - Store authentication credentials.
+        - Store account status.
+        - Provide relationships to roles and domain profiles.
+
+    Authentication passwords must always be stored as hashes.
+    Plain-text passwords must never be persisted.
+    """
+
     __tablename__ = "UserAccount"
 
-    # Primary key
+    # =========================================================
+    # Primary Key
+    # =========================================================
+
     user_id: Mapped[int] = mapped_column(
         "UserId",
         Integer,
@@ -33,7 +39,10 @@ class UserAccount(Base):
         autoincrement=True,
     )
 
-    # Unique user email
+    # =========================================================
+    # Authentication
+    # =========================================================
+
     email: Mapped[str] = mapped_column(
         "Email",
         String(254),
@@ -41,21 +50,26 @@ class UserAccount(Base):
         nullable=False,
     )
 
-    # Password hash
     password_hash: Mapped[str] = mapped_column(
         "PasswordHash",
         String(255),
         nullable=False,
     )
 
-    # Optional phone number
+    # =========================================================
+    # Contact Information
+    # =========================================================
+
     phone: Mapped[str | None] = mapped_column(
         "Phone",
         String(20),
         nullable=True,
     )
 
-    # Account status
+    # =========================================================
+    # Account Status
+    # =========================================================
+
     status: Mapped[str] = mapped_column(
         "Status",
         String(20),
@@ -63,27 +77,35 @@ class UserAccount(Base):
         default="Active",
     )
 
-    # Account creation timestamp
+    # =========================================================
+    # Audit
+    # =========================================================
+
     created_at: Mapped[datetime] = mapped_column(
         "CreatedAt",
         DateTime,
         nullable=False,
-        server_default=text("SYSUTCDATETIME()"),
-    )
-     
-     # Related user-role assignments
-    user_roles: Mapped[list["UserRole"]] = relationship(
-        back_populates="user",
+        default=lambda: datetime.now(UTC),
     )
 
-        # One-to-one patient profile
+    # =========================================================
+    # Relationships
+    # =========================================================
+
+    user_roles: Mapped[list["UserRole"]] = relationship(
+        "UserRole",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
     patient_profile: Mapped["PatientProfile | None"] = relationship(
+        "PatientProfile",
         back_populates="user",
         uselist=False,
     )
 
-    # One-to-one doctor profile
     doctor_profile: Mapped["DoctorProfile | None"] = relationship(
+        "DoctorProfile",
         back_populates="user",
         uselist=False,
     )
