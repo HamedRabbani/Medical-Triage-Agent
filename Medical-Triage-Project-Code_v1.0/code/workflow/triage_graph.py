@@ -1,4 +1,5 @@
-
+from application.config.settings import Settings
+from infrastructure.llm.llm_builder import build_llm
 from langgraph.graph import StateGraph, END
 
 from state.triage_state import TriageState
@@ -283,14 +284,10 @@ def build_triage_graph(
 # LLM Configuration
 # =============================================================
 
-llm_config = LLMConfig(
-    provider="ollama",
-    model="gemma3",
-)
+settings = Settings()
 
-
-llm_service = create_llm(
-    llm_config
+llm_service = build_llm(
+    settings
 )
 
 
