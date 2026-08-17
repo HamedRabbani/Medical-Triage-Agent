@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
 from application.auth.password_service import PasswordService
-
 from infrastructure.auth.auth_repository import AuthRepository
+
 
 @dataclass(frozen=True)
 class LoginResult:
@@ -16,19 +16,6 @@ class LoginResult:
 class LoginService:
     """
     Application service responsible for user authentication.
-
-    Responsibilities:
-        - Find user by email.
-        - Verify password.
-        - Validate account status.
-        - Resolve assigned roles.
-        - Return an immutable authentication result.
-
-    This service does not:
-        - Access SQLAlchemy directly.
-        - Hash passwords.
-        - Handle Streamlit UI.
-        - Perform authorization decisions for resources.
     """
 
     def __init__(
@@ -45,10 +32,6 @@ class LoginService:
         password: str,
     ) -> LoginResult:
 
-        # -----------------------------------------------------
-        # Input validation
-        # -----------------------------------------------------
-
         normalized_email = email.strip().lower()
 
         if not normalized_email or not password:
@@ -57,34 +40,32 @@ class LoginService:
                 error="Invalid email or password.",
             )
 
-        # -----------------------------------------------------
-        # Find user
-        # -----------------------------------------------------
-
         user = self._auth_repository.get_user_by_email(
             normalized_email
         )
 
-        # Do not reveal whether the email exists.
         if user is None:
             return LoginResult(
                 success=False,
                 error="Invalid email or password.",
             )
 
-        # -----------------------------------------------------
-        # Account status
-        # -----------------------------------------------------
+        # DEBUG - remove after testing
+        print("EMAIL:", user.email)
+        print("HASH:", user.password_hash)
+        print(
+            "VERIFY:",
+            self._password_service.verify_password(
+                password,
+                user.password_hash,
+            )
+        )
 
         if user.status != "Active":
             return LoginResult(
                 success=False,
                 error="Account is not active.",
             )
-
-        # -----------------------------------------------------
-        # Password verification
-        # -----------------------------------------------------
 
         password_valid = self._password_service.verify_password(
             password,
@@ -97,10 +78,6 @@ class LoginService:
                 error="Invalid email or password.",
             )
 
-        # -----------------------------------------------------
-        # Resolve roles
-        # -----------------------------------------------------
-
         roles = tuple(
             sorted(
                 {
@@ -110,10 +87,6 @@ class LoginService:
                 }
             )
         )
-
-        # -----------------------------------------------------
-        # Authentication successful
-        # -----------------------------------------------------
 
         return LoginResult(
             success=True,

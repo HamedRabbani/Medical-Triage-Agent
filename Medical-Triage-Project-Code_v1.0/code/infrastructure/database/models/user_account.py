@@ -6,7 +6,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..base import Base
 
-
 if TYPE_CHECKING:
     from .doctor_profile import DoctorProfile
     from .patient_profile import PatientProfile
@@ -14,23 +13,7 @@ if TYPE_CHECKING:
 
 
 class UserAccount(Base):
-    """
-    ORM model for application user accounts.
-
-    Responsibilities:
-        - Store authentication credentials.
-        - Store account status.
-        - Provide relationships to roles and domain profiles.
-
-    Authentication passwords must always be stored as hashes.
-    Plain-text passwords must never be persisted.
-    """
-
     __tablename__ = "UserAccount"
-
-    # =========================================================
-    # Primary Key
-    # =========================================================
 
     user_id: Mapped[int] = mapped_column(
         "UserId",
@@ -38,10 +21,6 @@ class UserAccount(Base):
         primary_key=True,
         autoincrement=True,
     )
-
-    # =========================================================
-    # Authentication
-    # =========================================================
 
     email: Mapped[str] = mapped_column(
         "Email",
@@ -56,19 +35,11 @@ class UserAccount(Base):
         nullable=False,
     )
 
-    # =========================================================
-    # Contact Information
-    # =========================================================
-
     phone: Mapped[str | None] = mapped_column(
         "Phone",
         String(20),
         nullable=True,
     )
-
-    # =========================================================
-    # Account Status
-    # =========================================================
 
     status: Mapped[str] = mapped_column(
         "Status",
@@ -77,20 +48,12 @@ class UserAccount(Base):
         default="Active",
     )
 
-    # =========================================================
-    # Audit
-    # =========================================================
-
     created_at: Mapped[datetime] = mapped_column(
         "CreatedAt",
         DateTime,
         nullable=False,
         default=lambda: datetime.now(UTC),
     )
-
-    # =========================================================
-    # Relationships
-    # =========================================================
 
     user_roles: Mapped[list["UserRole"]] = relationship(
         "UserRole",
@@ -109,4 +72,3 @@ class UserAccount(Base):
         back_populates="user",
         uselist=False,
     )
-

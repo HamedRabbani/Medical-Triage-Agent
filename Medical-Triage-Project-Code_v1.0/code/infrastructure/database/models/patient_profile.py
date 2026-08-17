@@ -1,22 +1,19 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Integer, String
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..base import Base
 
-from sqlalchemy import ForeignKey
-
 if TYPE_CHECKING:
-    from .user_account import UserAccount
     from .patient_doctor import PatientDoctor
+    from .user_account import UserAccount
 
 
 class PatientProfile(Base):
     __tablename__ = "PatientProfile"
 
-    # Primary key
     patient_id: Mapped[int] = mapped_column(
         "PatientId",
         Integer,
@@ -24,7 +21,6 @@ class PatientProfile(Base):
         autoincrement=True,
     )
 
-    # One-to-one relation with UserAccount
     user_id: Mapped[int] = mapped_column(
         "UserId",
         ForeignKey("UserAccount.UserId"),
@@ -32,35 +28,30 @@ class PatientProfile(Base):
         unique=True,
     )
 
-    # Patient first name
     first_name: Mapped[str] = mapped_column(
         "FirstName",
         String(100),
         nullable=False,
     )
 
-    # Patient last name
     last_name: Mapped[str] = mapped_column(
         "LastName",
         String(100),
         nullable=False,
     )
 
-    # Patient date of birth
-    date_of_birth: Mapped[datetime] = mapped_column(
+    date_of_birth: Mapped[date] = mapped_column(
         "DateOfBirth",
-        DateTime,
+        Date,
         nullable=False,
     )
 
-    # Patient gender
     gender: Mapped[str] = mapped_column(
         "Gender",
         String(20),
         nullable=False,
     )
 
-    # National identification number
     national_id: Mapped[str] = mapped_column(
         "NationalId",
         String(20),
@@ -68,19 +59,19 @@ class PatientProfile(Base):
         unique=True,
     )
 
-    # Profile creation timestamp
     created_at: Mapped[datetime] = mapped_column(
         "CreatedAt",
         DateTime,
         nullable=False,
+        default=lambda: datetime.now(),
     )
 
-    # Related user account
     user: Mapped["UserAccount"] = relationship(
+        "UserAccount",
         back_populates="patient_profile",
     )
 
-    # Doctor relationships
     doctor_relationships: Mapped[list["PatientDoctor"]] = relationship(
+        "PatientDoctor",
         back_populates="patient",
     )

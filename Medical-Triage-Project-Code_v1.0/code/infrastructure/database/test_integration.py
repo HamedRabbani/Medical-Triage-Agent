@@ -1,6 +1,6 @@
-
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 import uuid
+
 from .models import (
     ConversationMsg,
     PatientProfile,
@@ -11,25 +11,27 @@ from .models import (
 from .session import SessionLocal
 
 
-# Test complete database ORM flow
 def test_database_integration() -> None:
     with SessionLocal() as session:
 
         try:
+            # ---------------------------------------------------------
             # Create test user
+            # ---------------------------------------------------------
             user = UserAccount(
-            email=f"test_{uuid.uuid4().hex}@example.com",
-            password_hash="hamedrabbani123456789",
-            phone=None,
-            status="Active",
-            created_at=datetime.now(UTC),
-            
+                email=f"test_{uuid.uuid4().hex}@example.com",
+                password_hash="hamedrabbani123456789",
+                phone=None,
+                status="Active",
+                created_at=datetime.now(UTC),
             )
 
             session.add(user)
             session.flush()
 
+            # ---------------------------------------------------------
             # Create patient profile
+            # ---------------------------------------------------------
             patient = PatientProfile(
                 user_id=user.user_id,
                 first_name="hamed",
@@ -43,7 +45,9 @@ def test_database_integration() -> None:
             session.add(patient)
             session.flush()
 
+            # ---------------------------------------------------------
             # Create triage session
+            # ---------------------------------------------------------
             triage_session = TriageSession(
                 patient_id=patient.patient_id,
                 start_time=datetime.now(UTC),
@@ -53,7 +57,9 @@ def test_database_integration() -> None:
             session.add(triage_session)
             session.flush()
 
+            # ---------------------------------------------------------
             # Create conversation message
+            # ---------------------------------------------------------
             message = ConversationMsg(
                 session_id=triage_session.session_id,
                 sender_type="Patient",
@@ -63,7 +69,9 @@ def test_database_integration() -> None:
 
             session.add(message)
 
+            # ---------------------------------------------------------
             # Create triage result
+            # ---------------------------------------------------------
             result = TriageResult(
                 session_id=triage_session.session_id,
                 risk_level="High",
@@ -74,10 +82,14 @@ def test_database_integration() -> None:
 
             session.add(result)
 
-            # Commit test transaction
+            # ---------------------------------------------------------
+            # Commit
+            # ---------------------------------------------------------
             session.commit()
 
+            # ---------------------------------------------------------
             # Verify relationships
+            # ---------------------------------------------------------
             session.refresh(triage_session)
 
             print("\n=== Integration Test ===")
@@ -89,20 +101,31 @@ def test_database_integration() -> None:
             print(f"Session ID: {triage_session.session_id}")
 
             print("\nMessages:")
-            for msg in triage_session.messages:
-                print(f"  [{msg.sender_type}] {msg.content}")
 
-            print("\nResults:")
-            for triage_result in triage_session.results:
+            for msg in triage_session.messages:
                 print(
-                    f"  Risk: {triage_result.risk_level}"
-                    f" | Confidence: "
-                    f"{triage_result.confidence_score}"
+                    f"  [{msg.sender_type}] "
+                    f"{msg.content}"
                 )
 
-            print("\nIntegration test passed.")
+            print("\nResult:")
 
-            # Remove test data
+            if triage_session.result is not None:
+                print(
+                    f"  Risk: "
+                    f"{triage_session.result.risk_level}"
+                    f" | Confidence: "
+                    f"{triage_session.result.confidence_score}"
+                )
+
+                print(
+                    f"  Recommendation: "
+                    f"{triage_session.result.recommendation}"
+                )
+
+            # ---------------------------------------------------------
+            # Cleanup
+            # ---------------------------------------------------------
             session.delete(result)
             session.delete(message)
             session.delete(triage_session)
@@ -111,12 +134,12 @@ def test_database_integration() -> None:
 
             session.commit()
 
+            print("\nIntegration test passed.")
             print("Test data cleaned up.")
 
         except Exception:
             session.rollback()
             raise
-
 
 
 if __name__ == "__main__":

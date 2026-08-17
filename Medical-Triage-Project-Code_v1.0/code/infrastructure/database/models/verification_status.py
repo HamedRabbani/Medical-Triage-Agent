@@ -7,7 +7,6 @@ from ..base import Base
 class VerificationStatus(Base):
     __tablename__ = "VerificationStatus"
 
-    # Primary key
     status_id: Mapped[int] = mapped_column(
         "StatusId",
         Integer,
@@ -15,7 +14,6 @@ class VerificationStatus(Base):
         autoincrement=True,
     )
 
-    # Verification status name
     status_name: Mapped[str] = mapped_column(
         "StatusName",
         String(50),

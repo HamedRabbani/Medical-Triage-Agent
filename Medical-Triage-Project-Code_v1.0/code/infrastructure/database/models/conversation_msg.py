@@ -1,8 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
-from sqlalchemy.types import UnicodeText
+from sqlalchemy import BigInteger, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..base import Base
@@ -14,43 +13,40 @@ if TYPE_CHECKING:
 class ConversationMsg(Base):
     __tablename__ = "ConversationMsg"
 
-    # Primary key
     message_id: Mapped[int] = mapped_column(
         "MessageId",
-        Integer,
+        BigInteger,
         primary_key=True,
         autoincrement=True,
     )
 
-    # Triage session reference
     session_id: Mapped[int] = mapped_column(
         "SessionId",
+        BigInteger,
         ForeignKey("TriageSession.SessionId"),
         nullable=False,
     )
 
-    # Message sender type
     sender_type: Mapped[str] = mapped_column(
         "SenderType",
         String(20),
         nullable=False,
     )
 
-    # Message content
     content: Mapped[str] = mapped_column(
         "Content",
-        UnicodeText,
+        Text,
         nullable=False,
     )
 
-    # Message timestamp
     timestamp: Mapped[datetime] = mapped_column(
         "Timestamp",
         DateTime,
         nullable=False,
+        default=lambda: datetime.now(UTC),
     )
 
-    # Related triage session
     session: Mapped["TriageSession"] = relationship(
+        "TriageSession",
         back_populates="messages",
     )

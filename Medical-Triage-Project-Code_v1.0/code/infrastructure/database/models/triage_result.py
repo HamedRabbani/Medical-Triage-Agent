@@ -1,9 +1,9 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, Text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text
+
 from ..base import Base
 
 if TYPE_CHECKING:
@@ -13,50 +13,48 @@ if TYPE_CHECKING:
 class TriageResult(Base):
     __tablename__ = "TriageResult"
 
-    # Primary key
     result_id: Mapped[int] = mapped_column(
         "ResultId",
-        Integer,
+        BigInteger,
         primary_key=True,
         autoincrement=True,
     )
 
-    # Triage session reference
     session_id: Mapped[int] = mapped_column(
         "SessionId",
+        BigInteger,
         ForeignKey("TriageSession.SessionId"),
         nullable=False,
+        unique=True,
     )
 
-    # Risk classification
     risk_level: Mapped[str] = mapped_column(
         "RiskLevel",
         String(20),
         nullable=False,
     )
 
-    # Model confidence score
     confidence_score: Mapped[float] = mapped_column(
         "ConfidenceScore",
         Numeric(5, 2),
         nullable=False,
     )
 
-    # Recommended action
     recommendation: Mapped[str] = mapped_column(
         "Recommendation",
         Text,
         nullable=False,
     )
 
-    # Result creation timestamp
     created_at: Mapped[datetime] = mapped_column(
         "CreatedAt",
         DateTime,
         nullable=False,
+        default=lambda: datetime.now(UTC),
     )
 
-    # Related triage session
     session: Mapped["TriageSession"] = relationship(
-        back_populates="results",
+        "TriageSession",
+        back_populates="result",
+        uselist=False,
     )

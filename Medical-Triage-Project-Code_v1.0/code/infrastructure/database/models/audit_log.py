@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..base import Base
@@ -13,61 +13,57 @@ if TYPE_CHECKING:
 class AuditLog(Base):
     __tablename__ = "AuditLog"
 
-    # Primary key
     audit_id: Mapped[int] = mapped_column(
         "AuditId",
-        Integer,
+        BigInteger,
         primary_key=True,
         autoincrement=True,
     )
 
-    # User who performed the action
-    user_id: Mapped[int] = mapped_column(
+    user_id: Mapped[int | None] = mapped_column(
         "UserId",
+        Integer,
         ForeignKey("UserAccount.UserId"),
-        nullable=False,
+        nullable=True,
     )
 
-    # Action performed
     action: Mapped[str] = mapped_column(
         "Action",
-        String(100),
+        String(50),
         nullable=False,
     )
 
-    # Entity affected by the action
     entity_name: Mapped[str] = mapped_column(
         "EntityName",
         String(100),
         nullable=False,
     )
 
-    # ID of the affected entity
-    entity_id: Mapped[int] = mapped_column(
+    entity_id: Mapped[int | None] = mapped_column(
         "EntityId",
-        nullable=False,
+        Integer,
+        nullable=True,
     )
 
-    # Previous value
     old_value: Mapped[str | None] = mapped_column(
         "OldValue",
         Text,
         nullable=True,
     )
 
-    # New value
     new_value: Mapped[str | None] = mapped_column(
         "NewValue",
         Text,
         nullable=True,
     )
 
-    # Audit timestamp
     created_at: Mapped[datetime] = mapped_column(
         "CreatedAt",
         DateTime,
         nullable=False,
+        default=lambda: datetime.now(UTC),
     )
 
-    # Related user
-    user: Mapped["UserAccount"] = relationship()
+    user: Mapped["UserAccount | None"] = relationship(
+        "UserAccount",
+    )

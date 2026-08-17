@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 class HealthcareOrg(Base):
     __tablename__ = "HealthcareOrg"
 
-    # Primary key
     organization_id: Mapped[int] = mapped_column(
         "OrganizationId",
         Integer,
@@ -20,21 +19,18 @@ class HealthcareOrg(Base):
         autoincrement=True,
     )
 
-    # Organization name
     name: Mapped[str] = mapped_column(
         "Name",
         String(200),
         nullable=False,
     )
 
-    # Organization type
     type: Mapped[str] = mapped_column(
         "Type",
         String(50),
         nullable=False,
     )
 
-    # Unique license number
     license_number: Mapped[str] = mapped_column(
         "LicenseNumber",
         String(100),
@@ -42,14 +38,13 @@ class HealthcareOrg(Base):
         unique=True,
     )
 
-    # Organization address
     address: Mapped[str | None] = mapped_column(
         "Address",
         String(500),
         nullable=True,
     )
 
-    # Related doctors
     doctors: Mapped[list["DoctorProfile"]] = relationship(
+        "DoctorProfile",
         back_populates="organization",
     )

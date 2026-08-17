@@ -6,19 +6,34 @@ from .models import (
 from .session import SessionLocal
 
 
-# Test triage ORM relationships
 def test_triage_models() -> None:
     with SessionLocal() as session:
 
+        # ---------------------------------------------------------
         # Test triage sessions
+        # ---------------------------------------------------------
         sessions = session.query(TriageSession).all()
 
         for triage_session in sessions:
-            print(f"Session: {triage_session.session_id}")
-            print(f"  Patient ID: {triage_session.patient_id}")
-            print(f"  Status: {triage_session.status}")
 
+            print(
+                f"Session: "
+                f"{triage_session.session_id}"
+            )
+
+            print(
+                f"  Patient ID: "
+                f"{triage_session.patient_id}"
+            )
+
+            print(
+                f"  Status: "
+                f"{triage_session.status}"
+            )
+
+            # -----------------------------------------------------
             # Test conversation messages
+            # -----------------------------------------------------
             for message in triage_session.messages:
                 print(
                     f"  Message: "
@@ -26,24 +41,44 @@ def test_triage_models() -> None:
                     f"{message.content}"
                 )
 
-            # Test triage results
-            for result in triage_session.results:
+            # -----------------------------------------------------
+            # Test triage result
+            # -----------------------------------------------------
+            if triage_session.result is not None:
+
+                result = triage_session.result
+
                 print(
                     f"  Result: "
                     f"{result.risk_level} "
                     f"({result.confidence_score}%)"
                 )
+
                 print(
                     f"  Recommendation: "
                     f"{result.recommendation}"
                 )
 
+        # ---------------------------------------------------------
         # Direct table queries
-        messages = session.query(ConversationMsg).all()
-        results = session.query(TriageResult).all()
+        # ---------------------------------------------------------
+        messages = session.query(
+            ConversationMsg
+        ).all()
 
-        print(f"\nTotal messages: {len(messages)}")
-        print(f"Total results: {len(results)}")
+        results = session.query(
+            TriageResult
+        ).all()
+
+        print(
+            f"\nTotal messages: "
+            f"{len(messages)}"
+        )
+
+        print(
+            f"Total results: "
+            f"{len(results)}"
+        )
 
 
 if __name__ == "__main__":
