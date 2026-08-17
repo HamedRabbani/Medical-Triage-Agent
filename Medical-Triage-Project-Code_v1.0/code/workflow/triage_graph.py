@@ -1,5 +1,5 @@
 from application.config.settings import Settings
-from infrastructure.llm.llm_builder import build_llm
+from application.config.llm_provider import build_llm
 from langgraph.graph import StateGraph, END
 
 from state.triage_state import TriageState
