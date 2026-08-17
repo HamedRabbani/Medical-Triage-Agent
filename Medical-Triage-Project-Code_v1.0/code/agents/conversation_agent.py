@@ -1,9 +1,8 @@
+
+import time
+
 from application.contracts.conversation_extraction import (
     ConversationExtraction,
-)
-
-from application.contracts.conversation_intent import (
-    ConversationIntent,
 )
 
 from extractors.age_extractor import extract_age
@@ -21,6 +20,7 @@ Classify the user's message into exactly one intent:
 
 TRIAGE
 GENERAL
+PROFILE
 
 TRIAGE:
 - The user reports symptoms.
@@ -28,11 +28,23 @@ TRIAGE:
 - The user answers a medical triage question.
 - The user explicitly asks for medical assessment.
 
+PROFILE:
+- The user asks about their own profile.
+- The user asks what information the system knows about them.
+- The user asks for their own age, role, account information,
+  or personal information stored in their profile.
+- The user asks to check or show their profile.
+
 GENERAL:
 - Greetings.
 - Casual conversation.
 - Non-medical questions.
 - Normal conversation.
+
+Important:
+- PROFILE means the user's OWN profile.
+- Do not infer another patient's information.
+- Do not access or discuss another patient's information.
 
 Return structured output only.
 """
@@ -55,12 +67,13 @@ Return structured output only.
 # =============================================================
 
 def _is_active_triage(state):
+    """
+    Determine whether the system is already inside
+    an active medical triage flow.
 
-    if state.get("intent") == "TRIAGE":
-        return True
-
-    if state.get("symptoms"):
-        return True
+    Active triage context has priority over the
+    current message classification.
+    """
 
     if state.get("missing_information"):
         return True
@@ -72,6 +85,56 @@ def _is_active_triage(state):
 
 
 # =============================================================
+# Profile Intent Detection
+# =============================================================
+
+def _is_profile_request(text: str) -> bool:
+    """
+    Detect whether the user is asking about
+    their own profile/account information.
+
+    This is deterministic and does not require an LLM.
+    """
+
+    profile_keywords = [
+        # Persian
+        "پروفایل",
+        "پروفایل من",
+        "پروفایل منو",
+        "پروفایل خودم",
+        "اطلاعات من",
+        "اطلاعات شخصی من",
+        "اطلاعات حساب من",
+        "اطلاعات کاربری من",
+        "اطلاعاتی که از من داری",
+        "چه اطلاعاتی از من داری",
+        "مشخصات من",
+        "سنم",
+        "سن من",
+        "نقشم",
+        "نقش من",
+        "حساب من",
+
+        # English
+        "my profile",
+        "my account",
+        "my information",
+        "my personal information",
+        "what do you know about me",
+        "what information do you have about me",
+        "check my profile",
+        "show my profile",
+        "my age",
+        "my role",
+    ]
+
+    return any(
+        keyword in text
+        for keyword in profile_keywords
+    )
+
+
+# =============================================================
 # Deterministic Intent Detection
 # =============================================================
 
@@ -80,44 +143,78 @@ def _detect_intent_from_message(
     message,
 ):
     """
-    Deterministic baseline.
+    Deterministic intent baseline.
 
-    Existing triage context always wins.
+    Priority:
 
-    Medical information explicitly present in the
-    current message indicates TRIAGE.
+    1. Active triage context
+    2. Profile request
+    3. Explicit medical information
+    4. Otherwise GENERAL
     """
+
+    # ---------------------------------------------------------
+    # Existing active triage
+    # ---------------------------------------------------------
 
     if _is_active_triage(state):
         return "TRIAGE", 1.0
 
-    text = normalize_text(
-        message
-    )
+    # ---------------------------------------------------------
+    # Normalize message
+    # ---------------------------------------------------------
+
+    text = normalize_text(message)
 
     if not text:
         return "GENERAL", 0.9
 
-    symptoms = extract_symptoms(
-        text
-    )
+    # ---------------------------------------------------------
+    # Profile detection
+    # ---------------------------------------------------------
+
+    if _is_profile_request(text):
+        return "PROFILE", 1.0
+
+    # ---------------------------------------------------------
+    # Symptom detection
+    # ---------------------------------------------------------
+
+    symptoms = extract_symptoms(text)
 
     if symptoms:
         return "TRIAGE", 1.0
 
-    age = extract_age(
-        text
-    )
+    # ---------------------------------------------------------
+    # Age detection
+    # ---------------------------------------------------------
+
+    age = extract_age(text)
 
     if age is not None:
         return "TRIAGE", 0.9
 
-    duration = extract_duration(
-        text
-    )
+    # ---------------------------------------------------------
+    # Duration detection
+    # ---------------------------------------------------------
+
+    duration = extract_duration(text)
 
     if duration is not None:
         return "TRIAGE", 0.9
+
+    # ---------------------------------------------------------
+    # Severity detection
+    # ---------------------------------------------------------
+
+    severity = extract_severity(text)
+
+    if severity is not None:
+        return "TRIAGE", 0.9
+
+    # ---------------------------------------------------------
+    # No explicit medical information
+    # ---------------------------------------------------------
 
     return "GENERAL", 0.9
 
@@ -129,7 +226,6 @@ def _detect_intent_from_message(
 def conversation_agent(
     state,
     llm_service=None,
-    short_term_memory_service=None,
 ):
 
     message = state.get(
@@ -144,6 +240,48 @@ def conversation_agent(
         message = str(message)
 
     message = message.strip()
+
+    # =========================================================
+    # Debug
+    # =========================================================
+
+    print(
+        "\n========== CONVERSATION DEBUG =========="
+    )
+
+    print(
+        "Message:",
+        message,
+    )
+
+    print(
+        "Previous Intent:",
+        state.get("intent"),
+    )
+
+    print(
+        "Symptoms:",
+        state.get("symptoms"),
+    )
+
+    print(
+        "Age:",
+        state.get("age"),
+    )
+
+    print(
+        "Missing Information:",
+        state.get("missing_information"),
+    )
+
+    print(
+        "Next Question:",
+        state.get("next_question"),
+    )
+
+    print(
+        "========================================"
+    )
 
     # =========================================================
     # Conversation History
@@ -176,6 +314,62 @@ def conversation_agent(
         )
     )
 
+    normalized_message = normalize_text(
+        message
+    )
+
+    print(
+        "[DETERMINISTIC DEBUG]",
+        {
+            "message": message,
+            "intent": detected_intent,
+            "confidence": detected_confidence,
+            "age": extract_age(
+                normalized_message
+            ),
+            "symptoms": extract_symptoms(
+                normalized_message
+            ),
+            "duration": extract_duration(
+                normalized_message
+            ),
+            "severity": extract_severity(
+                normalized_message
+            ),
+        }
+    )
+
+    print(
+        "[DETERMINISTIC]",
+        detected_intent,
+        detected_confidence,
+    )
+
+    # =========================================================
+    # PROFILE
+    #
+    # IMPORTANT:
+    # Profile requests must NOT enter medical extraction.
+    # They must NOT be handled by RAG.
+    #
+    # The actual profile lookup will be handled by
+    # the application/profile service layer.
+    # =========================================================
+
+    if detected_intent == "PROFILE":
+
+        print(
+            "[ROUTING] Deterministic PROFILE -> PROFILE"
+        )
+
+        return {
+            **state,
+            "conversation_history": history,
+            "intent": "PROFILE",
+            "intent_confidence": detected_confidence,
+            "assistant_response": None,
+        }
+
     # =========================================================
     # No LLM
     # =========================================================
@@ -191,10 +385,27 @@ def conversation_agent(
         }
 
     # =========================================================
-    # Existing Active Triage
+    # Active Triage
+    #
+    # IMPORTANT:
+    # Do NOT call Intent LLM here.
+    #
+    # Example:
+    #
+    # System:
+    # "How old are you?"
+    #
+    # User:
+    # "29"
+    #
+    # This must remain TRIAGE.
     # =========================================================
 
     if _is_active_triage(state):
+
+        print(
+            "[ROUTING] Active triage -> TRIAGE"
+        )
 
         return {
             **state,
@@ -205,60 +416,39 @@ def conversation_agent(
         }
 
     # =========================================================
-    # Intent Classification
-    # =========================================================
-
-    intent_result = llm_service.generate_structured(
-        prompt=f"""
-Classify this user message:
-
-{message}
-""",
-        response_model=ConversationIntent,
-        system_prompt=INTENT_SYSTEM_PROMPT,
-    )
-
-    if not isinstance(
-        intent_result,
-        ConversationIntent,
-    ):
-        raise TypeError(
-            "Conversation intent must return "
-            "ConversationIntent."
-        )
-
-    llm_intent = str(
-        intent_result.intent
-    ).upper()
-
-    llm_confidence = (
-        intent_result.confidence
-    )
-
-    # =========================================================
-    # Deterministic Medical Override
+    # Deterministic TRIAGE
     #
-    # Safety baseline wins over LLM GENERAL classification.
+    # Medical information was explicitly detected.
+    #
+    # Do NOT waste an Intent LLM call.
     # =========================================================
 
     if detected_intent == "TRIAGE":
 
-        intent = "TRIAGE"
-
-        confidence = max(
-            detected_confidence,
-            llm_confidence or 0.0,
+        print(
+            "[ROUTING] Deterministic medical detection -> TRIAGE"
         )
+
+        intent = "TRIAGE"
+        confidence = detected_confidence
 
     else:
 
-        intent = llm_intent
+        # =====================================================
+        # Deterministic GENERAL
+        # =====================================================
 
-        confidence = (
-            llm_confidence
-            if llm_confidence is not None
-            else detected_confidence
+        print(
+            "[ROUTING] Deterministic GENERAL -> GENERAL"
         )
+
+        return {
+            **state,
+            "conversation_history": history,
+            "intent": "GENERAL",
+            "intent_confidence": detected_confidence,
+            "assistant_response": None,
+        }
 
     # =========================================================
     # GENERAL
@@ -278,6 +468,12 @@ Classify this user message:
     # TRIAGE Extraction
     # =========================================================
 
+    print(
+        "[ROUTING] Starting medical extraction..."
+    )
+
+    start_time = time.perf_counter()
+
     extraction_result = llm_service.generate_structured(
         prompt=f"""
 Extract medical information from:
@@ -287,6 +483,20 @@ Extract medical information from:
         response_model=ConversationExtraction,
         system_prompt=EXTRACTION_SYSTEM_PROMPT,
     )
+
+    extraction_latency = (
+        time.perf_counter()
+        - start_time
+    )
+
+    print(
+        f"[LATENCY] Extraction LLM: "
+        f"{extraction_latency:.2f}s"
+    )
+
+    # =========================================================
+    # Contract Validation
+    # =========================================================
 
     if not isinstance(
         extraction_result,
@@ -331,7 +541,10 @@ Extract medical information from:
         )
 
     if age is None:
-        age = state.get("age")
+
+        age = state.get(
+            "age"
+        )
 
     # =========================================================
     # Severity
@@ -346,6 +559,7 @@ Extract medical information from:
         )
 
     if severity is None:
+
         severity = state.get(
             "severity"
         )
@@ -363,6 +577,7 @@ Extract medical information from:
         )
 
     if duration is None:
+
         duration = state.get(
             "duration"
         )
@@ -374,10 +589,13 @@ Extract medical information from:
     red_flags = list(
         dict.fromkeys(
             list(
-                state.get("red_flags")
+                state.get(
+                    "red_flags"
+                )
                 or []
             )
-            + list(
+            +
+            list(
                 extraction_result.red_flags
                 or []
             )
@@ -385,18 +603,27 @@ Extract medical information from:
     )
 
     # =========================================================
-    # Return
+    # Final State
     # =========================================================
 
     return {
         **state,
+
         "conversation_history": history,
+
         "intent": "TRIAGE",
+
         "intent_confidence": confidence,
+
         "symptoms": symptoms,
+
         "age": age,
+
         "severity": severity,
+
         "duration": duration,
+
         "red_flags": red_flags,
+
         "assistant_response": None,
     }

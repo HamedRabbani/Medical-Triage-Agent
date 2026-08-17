@@ -1,3 +1,4 @@
+
 from langgraph.graph import StateGraph, END
 
 from state.triage_state import TriageState
@@ -28,34 +29,11 @@ def route_intent(state):
         state.get("intent") or ""
     ).upper()
 
-    # ---------------------------------------------------------
-    # Active triage context has priority over GENERAL
-    # ---------------------------------------------------------
-
-    if (
-        state.get("symptoms")
-        or state.get("missing_information")
-        or state.get("next_question") is not None
-    ):
-        return "triage"
-
-    # ---------------------------------------------------------
-    # Explicit TRIAGE
-    # ---------------------------------------------------------
-
     if intent == "TRIAGE":
         return "triage"
 
-    # ---------------------------------------------------------
-    # Explicit GENERAL
-    # ---------------------------------------------------------
-
     if intent == "GENERAL":
         return "general"
-
-    # ---------------------------------------------------------
-    # Default
-    # ---------------------------------------------------------
 
     return "general"
 
@@ -136,6 +114,7 @@ def debug_risk_state(state):
 
 def build_triage_graph(
     llm_service=None,
+    short_term_memory_service=None,
 ):
 
     graph = StateGraph(
@@ -167,6 +146,7 @@ def build_triage_graph(
                 llm_service=llm_service,
             ),
     )
+        
 
     # =========================================================
     # General Conversation

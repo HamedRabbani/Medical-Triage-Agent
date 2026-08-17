@@ -1,3 +1,4 @@
+
 import re
 
 from utils.text_normalizer import normalize_text
@@ -9,8 +10,16 @@ from utils.text_normalizer import normalize_text
 #
 # Canonical symptom name -> possible user expressions
 #
-# The extractor returns canonical English names.
-# The input can be Persian or English.
+# The extractor only extracts information explicitly stated
+# by the current user message.
+#
+# It does NOT:
+# - access patient profiles
+# - access other patients
+# - access medical knowledge
+# - perform risk assessment
+# - use RAG
+#
 # =============================================================
 
 SYMPTOM_PATTERNS: dict[str, list[str]] = {
@@ -24,6 +33,7 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
         "chest ache",
         "pain in my chest",
         "pain on my chest",
+
         "درد قفسه سینه",
         "درد قفسه سینه دارم",
         "درد سینه",
@@ -39,6 +49,7 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
         "chest pressure",
         "pressure in my chest",
         "pressure on my chest",
+
         "فشار روی قفسه سینه",
         "فشار روی سینه",
         "احساس فشار در قفسه سینه",
@@ -50,6 +61,7 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
         "heart palpitations",
         "heart racing",
         "racing heart",
+
         "تپش قلب",
         "قلبم تند میزنه",
         "قلبم تند می زنه",
@@ -68,6 +80,7 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
         "can't breathe",
         "cannot breathe",
         "breathing difficulty",
+
         "تنگی نفس",
         "تنگ نفس",
         "نفس تنگی",
@@ -82,6 +95,7 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
     "cough": [
         "cough",
         "coughing",
+
         "سرفه",
         "سرفه دارم",
         "سرفه میکنم",
@@ -91,6 +105,7 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
     "wheezing": [
         "wheezing",
         "wheeze",
+
         "خس خس",
         "خس خس سینه",
         "خس خس میکنم",
@@ -104,6 +119,7 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
     "headache": [
         "headache",
         "head pain",
+
         "سر درد",
         "سردرد",
         "سرم درد میکنه",
@@ -114,10 +130,10 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
         "dizziness",
         "dizzy",
         "feeling dizzy",
+
         "سرگیجه",
         "سرم گیج میره",
         "سرم گیج می رود",
-        "سرم گیج میره",
         "احساس سرگیجه",
     ],
 
@@ -126,6 +142,7 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
         "fainted",
         "passed out",
         "loss of consciousness",
+
         "غش",
         "غش کردم",
         "بیهوش شدم",
@@ -137,6 +154,7 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
         "confusion",
         "confused",
         "mental confusion",
+
         "گیجی",
         "گیج هستم",
         "گیج شدم",
@@ -153,6 +171,7 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
         "stomach pain",
         "belly pain",
         "pain in my abdomen",
+
         "درد شکم",
         "دل درد",
         "شکم درد",
@@ -167,6 +186,7 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
         "nausea",
         "nauseous",
         "feeling nauseous",
+
         "تهوع",
         "حالت تهوع",
         "حالم تهوع داره",
@@ -177,6 +197,7 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
         "vomiting",
         "vomit",
         "throwing up",
+
         "استفراغ",
         "بالا آوردن",
         "بالا آوردم",
@@ -186,17 +207,19 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
     "diarrhea": [
         "diarrhea",
         "loose stool",
+
         "اسهال",
         "مدفوع شل",
     ],
 
     # ---------------------------------------------------------
-    # Pain
+    # Musculoskeletal
     # ---------------------------------------------------------
 
     "back pain": [
         "back pain",
         "pain in my back",
+
         "درد کمر",
         "کمر درد",
         "کمرم درد میکنه",
@@ -206,10 +229,45 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
     "neck pain": [
         "neck pain",
         "pain in my neck",
+
         "درد گردن",
         "گردن درد",
         "گردنم درد میکنه",
         "گردنم درد می کنه",
+    ],
+
+    "leg pain": [
+        "leg pain",
+        "pain in my leg",
+        "pain in my legs",
+        "my leg hurts",
+        "my legs hurt",
+
+        "درد پا",
+        "پا درد",
+        "پام درد میکنه",
+        "پام درد می کنه",
+        "پاهام درد میکنه",
+        "پاهام درد می کنه",
+        "پاهایم درد می کند",
+        "پاهایم درد میکنه",
+    ],
+
+    "fracture": [
+        "fracture",
+        "broken leg",
+        "my leg is broken",
+        "broken my leg",
+
+        "شکستگی",
+        "پایم شکسته",
+        "پام شکسته",
+        "پاهام شکسته",
+        "پایم شکسته است",
+        "پام شکسته است",
+        "پاهام شکسته است",
+        "پایم شکسته شده",
+        "پام شکسته شده",
     ],
 
     # ---------------------------------------------------------
@@ -219,6 +277,7 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
     "fever": [
         "fever",
         "high temperature",
+
         "تب",
         "تب دارم",
         "تب کردم",
@@ -230,6 +289,7 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
         "tired",
         "very tired",
         "extreme tiredness",
+
         "خستگی",
         "خسته ام",
         "خیلی خسته ام",
@@ -240,6 +300,7 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
         "weakness",
         "weak",
         "feeling weak",
+
         "ضعف",
         "ضعف دارم",
         "احساس ضعف",
@@ -251,6 +312,7 @@ SYMPTOM_PATTERNS: dict[str, list[str]] = {
     "swelling": [
         "swelling",
         "swollen",
+
         "تورم",
         "ورم",
         "ورم کرده",
@@ -273,7 +335,6 @@ def _normalize_for_matching(text: str) -> str:
 
     normalized = normalize_text(text)
 
-    # Normalize common Persian character variants.
     normalized = (
         normalized
         .replace("ي", "ی")
@@ -283,21 +344,18 @@ def _normalize_for_matching(text: str) -> str:
         .replace("ة", "ه")
     )
 
-    # Normalize Arabic/Persian punctuation.
     normalized = re.sub(
         r"[،؛؟]+",
         " ",
         normalized,
     )
 
-    # Normalize English punctuation.
     normalized = re.sub(
         r"[,.!?;:]+",
         " ",
         normalized,
     )
 
-    # Collapse multiple spaces.
     normalized = re.sub(
         r"\s+",
         " ",
@@ -312,22 +370,7 @@ def _phrase_matches(
     phrase: str,
 ) -> bool:
     """
-    Safely determine whether a symptom phrase exists
-    in the normalized text.
-
-    For multi-word phrases:
-        substring matching is acceptable.
-
-    For short single words:
-        word-boundary matching prevents false positives.
-
-    Example:
-
-        "کمک"
-
-    must not match:
-
-        "کم"
+    Safely determine whether a phrase exists in text.
     """
 
     phrase = phrase.strip().lower()
@@ -335,22 +378,19 @@ def _phrase_matches(
     if not phrase:
         return False
 
-    # ---------------------------------------------------------
-    # Multi-word phrase
-    # ---------------------------------------------------------
-
     if " " in phrase:
         return phrase in text
 
-    # ---------------------------------------------------------
-    # Single word
-    # ---------------------------------------------------------
+    pattern = (
+        rf"(?<!\S)"
+        rf"{re.escape(phrase)}"
+        rf"(?!\S)"
+    )
 
-    # Persian words do not always behave perfectly with
-    # Python's \b, so use whitespace-aware boundaries.
-    pattern = rf"(?<!\S){re.escape(phrase)}(?!\S)"
-
-    return re.search(pattern, text) is not None
+    return re.search(
+        pattern,
+        text,
+    ) is not None
 
 
 # =============================================================
@@ -359,30 +399,10 @@ def _phrase_matches(
 
 def extract_symptoms(text: str) -> list[str]:
     """
-    Extract canonical symptoms from user text.
+    Extract canonical symptoms explicitly stated
+    in the current user message.
 
-    Parameters
-    ----------
-    text:
-        User message in Persian or English.
-
-    Returns
-    -------
-    list[str]
-        Canonical symptom names.
-
-    Examples
-    --------
-    >>> extract_symptoms("درد قفسه سینه دارم")
-    ['chest pain']
-
-    >>> extract_symptoms(
-    ...     "درد قفسه سینه دارم و تنگی نفس"
-    ... )
-    ['chest pain', 'shortness of breath']
-
-    >>> extract_symptoms("Hello, how are you?")
-    []
+    Returns canonical English symptom names.
     """
 
     if not isinstance(text, str):
@@ -395,9 +415,9 @@ def extract_symptoms(text: str) -> list[str]:
 
     detected_symptoms: list[str] = []
 
-    # =========================================================
-    # Match patterns
-    # =========================================================
+    # ---------------------------------------------------------
+    # Specific symptoms
+    # ---------------------------------------------------------
 
     for symptom, patterns in SYMPTOM_PATTERNS.items():
 
@@ -415,15 +435,42 @@ def extract_symptoms(text: str) -> list[str]:
                 normalized_pattern,
             ):
                 detected_symptoms.append(symptom)
-
-                # Once a canonical symptom is found,
-                # no need to check its remaining aliases.
                 break
 
-    # =========================================================
-    # Remove duplicates while preserving order
-    # =========================================================
+    # ---------------------------------------------------------
+    # Generic pain fallback
+    #
+    # Only add "general pain" when no specific
+    # pain location was detected.
+    # ---------------------------------------------------------
+
+    specific_pain_symptoms = {
+        "chest pain",
+        "abdominal pain",
+        "back pain",
+        "neck pain",
+        "leg pain",
+    }
+
+    has_specific_pain = any(
+        symptom in specific_pain_symptoms
+        for symptom in detected_symptoms
+    )
+
+    if (
+        not has_specific_pain
+        and _phrase_matches(
+            normalized_text,
+            "درد",
+        )
+    ):
+        detected_symptoms.append(
+            "general pain"
+        )
 
     return list(
-        dict.fromkeys(detected_symptoms)
+        dict.fromkeys(
+            detected_symptoms
+        )
     )
+

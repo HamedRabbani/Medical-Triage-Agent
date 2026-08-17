@@ -1,24 +1,30 @@
+
 import re
 
 from utils.text_normalizer import normalize_text
 
 
 SEVERITY_PATTERNS = {
+
+    # =========================================================
+    # Severe
+    # =========================================================
+
     "severe": [
         r"\bsevere\b",
         r"\bvery\s+severe\b",
         r"\bvery\s+painful\b",
         r"\bterrible\b",
-        r"\ba\s+lot\b",
 
         r"(?<![\w\u0600-\u06FF])شدید(?![\w\u0600-\u06FF])",
         r"خیلی\s+شدید",
-        r"خیلی\s+زیاده",
-        r"خیلی\s+زیاد(?:\s+است)?",
         r"خیلی\s+درد\s+دارم",
         r"دردم\s+شدیده",
-        r"(?<![\w\u0600-\u06FF])زیاد(?![\w\u0600-\u06FF])",
     ],
+
+    # =========================================================
+    # Moderate
+    # =========================================================
 
     "moderate": [
         r"\bmoderate\b",
@@ -28,6 +34,10 @@ SEVERITY_PATTERNS = {
         r"(?<![\w\u0600-\u06FF])معمولی(?![\w\u0600-\u06FF])",
         r"نه\s+کم\s+نه\s+زیاد",
     ],
+
+    # =========================================================
+    # Mild
+    # =========================================================
 
     "mild": [
         r"\bmild\b",
@@ -42,33 +52,24 @@ SEVERITY_PATTERNS = {
 }
 
 
-def extract_severity(text):
+def extract_severity(text: str) -> str | None:
+    """
+    Extract explicitly stated symptom severity.
 
-    if not isinstance(
-        text,
-        str,
-    ):
+    Returns:
+        "severe"
+        "moderate"
+        "mild"
+        None
+    """
+
+    if not isinstance(text, str):
         return None
 
-    text = normalize_text(
-        text
-    )
+    text = normalize_text(text)
 
     if not text:
         return None
-
-    # =========================================================
-    # Moderate
-    # =========================================================
-
-    for pattern in SEVERITY_PATTERNS["moderate"]:
-
-        if re.search(
-            pattern,
-            text,
-            flags=re.IGNORECASE,
-        ):
-            return "moderate"
 
     # =========================================================
     # Severe
@@ -82,6 +83,19 @@ def extract_severity(text):
             flags=re.IGNORECASE,
         ):
             return "severe"
+
+    # =========================================================
+    # Moderate
+    # =========================================================
+
+    for pattern in SEVERITY_PATTERNS["moderate"]:
+
+        if re.search(
+            pattern,
+            text,
+            flags=re.IGNORECASE,
+        ):
+            return "moderate"
 
     # =========================================================
     # Mild

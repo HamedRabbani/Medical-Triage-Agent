@@ -70,6 +70,8 @@ class TriageState(TypedDict, total=False):
     intent: str | None
     intent_confidence: float | None
 
+    triage_active: bool
+    
     assistant_response: str | None
     response: str | None
 
