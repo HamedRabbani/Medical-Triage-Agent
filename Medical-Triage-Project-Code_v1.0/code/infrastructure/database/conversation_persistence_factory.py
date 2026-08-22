@@ -7,7 +7,6 @@ from application.ports.database_backend import (
 def create_database_backend(
     settings: Settings,
 ) -> DatabaseBackend:
-    """Create the configured database backend."""
 
     backend = (
         settings.db_backend
@@ -15,17 +14,13 @@ def create_database_backend(
         .lower()
     )
 
-    # =========================================================
-    # SQL Server
-    # =========================================================
-
     if backend == "sqlserver":
 
-        # IMPORTANT:
-        # Import SQL Server dependencies only when
-        # SQL Server is actually selected.
         from infrastructure.database.repositories.sql_conversation_history_repository import (
             SQLConversationHistoryRepository,
+        )
+        from infrastructure.database.repositories.sql_patient_repository import (
+            SQLPatientRepository,
         )
         from infrastructure.database.repositories.sql_triage_persistence_repository import (
             SQLTriagePersistenceRepository,
@@ -40,54 +35,41 @@ def create_database_backend(
         session = SessionLocal()
         uow = UnitOfWork(session)
 
-        triage_repository = (
-            SQLTriagePersistenceRepository(
+        backend = DatabaseBackend(
+            triage=SQLTriagePersistenceRepository(
                 uow
-            )
-        )
-
-        conversation_repository = (
-            SQLConversationHistoryRepository(
+            ),
+            conversation=SQLConversationHistoryRepository(
                 uow
-            )
+            ),
+            patient=SQLPatientRepository(
+                uow
+            ),
         )
 
-        backend_resource = session
+        backend.close = session.close
 
-        database_backend = DatabaseBackend(
-            triage=triage_repository,
-            conversation=conversation_repository,
-        )
-
-        def close() -> None:
-            backend_resource.close()
-
-        database_backend.close = close
-
-        return database_backend
-
-    # =========================================================
-    # Supabase
-    # =========================================================
+        return backend
 
     if backend == "supabase":
 
         if not settings.supabase_url:
             raise ValueError(
-                "SUPABASE_URL is required "
-                "for Supabase backend."
+                "SUPABASE_URL is required."
             )
 
         if not settings.supabase_key:
             raise ValueError(
-                "SUPABASE_KEY is required "
-                "for Supabase backend."
+                "SUPABASE_KEY is required."
             )
 
         from supabase import create_client
 
         from infrastructure.database.repositories.supabase_conversation_history_repository import (
             SupabaseConversationHistoryRepository,
+        )
+        from infrastructure.database.repositories.supabase_patient_repository import (
+            SupabasePatientRepository,
         )
         from infrastructure.database.repositories.supabase_triage_persistence_repository import (
             SupabaseTriagePersistenceRepository,
@@ -98,24 +80,18 @@ def create_database_backend(
             settings.supabase_key,
         )
 
-        triage_repository = (
-            SupabaseTriagePersistenceRepository(
-                client
-            )
-        )
-
-        conversation_repository = (
-            SupabaseConversationHistoryRepository(
-                client
-            )
-        )
-
         return DatabaseBackend(
-            triage=triage_repository,
-            conversation=conversation_repository,
+            triage=SupabaseTriagePersistenceRepository(
+                client
+            ),
+            conversation=SupabaseConversationHistoryRepository(
+                client
+            ),
+            patient=SupabasePatientRepository(
+                client
+            ),
         )
 
     raise ValueError(
-        f"Unsupported DB_BACKEND: "
-        f"{settings.db_backend}"
+        f"Unsupported DB_BACKEND: {settings.db_backend}"
     )

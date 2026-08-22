@@ -1,6 +1,6 @@
-
 import streamlit as st
 
+from application.config.settings import Settings
 from application.services.patient_service import (
     PatientService,
 )
@@ -9,12 +9,8 @@ from infrastructure.auth.auth_factory import (
     create_login_service,
 )
 
-from infrastructure.database.session import (
-    SessionLocal,
-)
-
-from infrastructure.database.unit_of_work import (
-    UnitOfWork,
+from infrastructure.database.conversation_persistence_factory import (
+    create_database_backend,
 )
 
 
@@ -71,10 +67,18 @@ def render_login() -> bool:
         return False
 
     # ========================================================
-    # Authenticate
+    # Configuration
     # ========================================================
 
-    login_service, session = create_login_service()
+    settings = Settings()
+
+    # ========================================================
+    # Authentication
+    # ========================================================
+
+    login_service, auth_resource = (
+        create_login_service(settings)
+    )
 
     try:
 
@@ -85,7 +89,12 @@ def render_login() -> bool:
 
     finally:
 
-        session.close()
+        if auth_resource is not None:
+            auth_resource.close()
+
+    # ========================================================
+    # Authentication Failure
+    # ========================================================
 
     if not result.success:
 
@@ -102,7 +111,9 @@ def render_login() -> bool:
 
     roles = [
         str(role).lower()
-        for role in (result.roles or [])
+        for role in (
+            result.roles or []
+        )
     ]
 
     # ========================================================
@@ -111,13 +122,16 @@ def render_login() -> bool:
 
     st.session_state.authenticated = True
 
-    st.session_state.user_id = result.user_id
+    st.session_state.user_id = (
+        result.user_id
+    )
 
-    st.session_state.email = result.email
+    st.session_state.email = (
+        result.email
+    )
 
     st.session_state.roles = roles
 
-    # Always initialize patient_id
     st.session_state.patient_id = None
 
     # ========================================================
@@ -125,29 +139,44 @@ def render_login() -> bool:
     # ONLY FOR PATIENT USERS
     # ========================================================
 
+    database_backend = None
+
     if "patient" in roles:
 
-        patient_session = SessionLocal()
+        database_backend = (
+            create_database_backend(
+                settings
+            )
+        )
 
         try:
 
-            uow = UnitOfWork(patient_session)
-
-            patient_service = PatientService(uow)
-
-            patient = patient_service.get_patient_by_user_id(
-                result.user_id
+            patient_service = PatientService(
+                database_backend.patient
             )
 
-        finally:
+            patient = (
+                patient_service
+                .get_patient_by_user_id(
+                    result.user_id
+                )
+            )
 
-            patient_session.close()
+        except Exception:
 
-        # ----------------------------------------------------
-        # Patient profile must exist
-        # ----------------------------------------------------
+            database_backend.close()
+
+            st.session_state.authenticated = False
+
+            st.error(
+                "Patient profile could not be loaded."
+            )
+
+            return False
 
         if patient is None:
+
+            database_backend.close()
 
             st.session_state.authenticated = False
 
@@ -158,13 +187,11 @@ def render_login() -> bool:
 
             return False
 
-        # ----------------------------------------------------
-        # Store Patient ID
-        # ----------------------------------------------------
-
         st.session_state.patient_id = (
             patient.patient_id
         )
+
+        database_backend.close()
 
     # ========================================================
     # Authentication Context Validation
@@ -172,36 +199,21 @@ def render_login() -> bool:
 
     if "patient" in roles:
 
-        if st.session_state.patient_id is None:
+        if (
+            st.session_state.patient_id
+            is None
+        ):
 
             st.session_state.authenticated = False
 
             st.error(
-                "Patient authentication context could not "
-                "be initialized."
+                "Patient authentication context "
+                "could not be initialized."
             )
 
             return False
 
-    # ========================================================
-    # DEBUG
-    # Temporary: remove after confirming the flow
-    # ========================================================
-
-    st.write(
-        "DEBUG user_id:",
-        st.session_state.get("user_id"),
-    )
-
-    st.write(
-        "DEBUG patient_id:",
-        st.session_state.get("patient_id"),
-    )
-
-    st.write(
-        "DEBUG roles:",
-        st.session_state.get("roles"),
-    )
+    
 
     # ========================================================
     # Login Success
@@ -214,4 +226,3 @@ def render_login() -> bool:
     st.rerun()
 
     return True
-
