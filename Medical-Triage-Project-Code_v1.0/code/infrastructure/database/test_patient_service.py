@@ -3,12 +3,21 @@ from types import SimpleNamespace
 from application.auth.authorization_service import (
     AuthorizationService,
 )
-from application.services.patient_service import PatientService
+from application.services.patient_service import (
+    PatientService,
+)
+
+from infrastructure.database.repositories.sql_patient_repository import (
+    SQLPatientRepository,
+)
 from infrastructure.database.session import SessionLocal
 from infrastructure.database.unit_of_work import UnitOfWork
 
 
-def make_user(role: str, user_id: int):
+def make_user(
+    role: str,
+    user_id: int,
+):
     return SimpleNamespace(
         user_id=user_id,
         user_roles=[
@@ -21,12 +30,19 @@ def make_user(role: str, user_id: int):
     )
 
 
-def test_patient_service_patient_can_access_own_profile() -> None:
+def test_patient_service_patient_can_access_own_profile():
 
     with SessionLocal() as session:
 
         uow = UnitOfWork(session)
-        service = PatientService(uow)
+
+        repository = SQLPatientRepository(
+            uow
+        )
+
+        service = PatientService(
+            repository
+        )
 
         patients = uow.patients.get_all()
 
@@ -46,15 +62,24 @@ def test_patient_service_patient_can_access_own_profile() -> None:
         )
 
         assert result is not None
-        assert result.patient_id == patient.patient_id
+        assert result.patient_id == (
+            patient.patient_id
+        )
 
 
-def test_patient_service_patient_cannot_access_another_patient() -> None:
+def test_patient_service_patient_cannot_access_another_patient():
 
     with SessionLocal() as session:
 
         uow = UnitOfWork(session)
-        service = PatientService(uow)
+
+        repository = SQLPatientRepository(
+            uow
+        )
+
+        service = PatientService(
+            repository
+        )
 
         patients = uow.patients.get_all()
 
@@ -76,12 +101,19 @@ def test_patient_service_patient_cannot_access_another_patient() -> None:
         assert result is None
 
 
-def test_patient_service_get_by_user_allows_own_profile() -> None:
+def test_patient_service_get_by_user_allows_own_profile():
 
     with SessionLocal() as session:
 
         uow = UnitOfWork(session)
-        service = PatientService(uow)
+
+        repository = SQLPatientRepository(
+            uow
+        )
+
+        service = PatientService(
+            repository
+        )
 
         patients = uow.patients.get_all()
 
@@ -101,15 +133,24 @@ def test_patient_service_get_by_user_allows_own_profile() -> None:
         )
 
         assert result is not None
-        assert result.patient_id == patient.patient_id
+        assert result.patient_id == (
+            patient.patient_id
+        )
 
 
-def test_patient_service_get_by_user_rejects_another_patient() -> None:
+def test_patient_service_get_by_user_rejects_another_patient():
 
     with SessionLocal() as session:
 
         uow = UnitOfWork(session)
-        service = PatientService(uow)
+
+        repository = SQLPatientRepository(
+            uow
+        )
+
+        service = PatientService(
+            repository
+        )
 
         patients = uow.patients.get_all()
 

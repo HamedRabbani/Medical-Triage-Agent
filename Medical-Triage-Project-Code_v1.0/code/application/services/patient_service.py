@@ -2,23 +2,26 @@ from application.auth.authorization_service import (
     AuthorizationService,
 )
 
-from infrastructure.database.unit_of_work import UnitOfWork
+from application.ports.patient_port import PatientPort
 
 
 class PatientService:
     """Application service for patient use cases."""
 
-    def __init__(self, uow: UnitOfWork):
-        self.uow = uow
+    def __init__(
+        self,
+        repository: PatientPort,
+    ):
+        self.repository = repository
 
     def get_patient(
         self,
         user,
         patient_id: int,
     ):
-        """Get a patient by ID after authorization."""
+        """Get patient by patient ID after authorization."""
 
-        patient = self.uow.patients.get_by_id(
+        patient = self.repository.get_patient_by_id(
             patient_id
         )
 
@@ -39,9 +42,9 @@ class PatientService:
         user,
         user_id: int,
     ):
-        """Get patient profile by user ID after authorization."""
+        """Get patient by user ID after authorization."""
 
-        patient = self.uow.patients.get_by_user_id(
+        patient = self.repository.get_patient_by_user_id(
             user_id
         )
 
@@ -61,8 +64,8 @@ class PatientService:
         self,
         user_id: int,
     ):
-        """Get patient profile by user ID."""
+        """Get patient by user ID."""
 
-        return self.uow.patients.get_by_user_id(
+        return self.repository.get_patient_by_user_id(
             user_id
         )
