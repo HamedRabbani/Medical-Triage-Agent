@@ -1,5 +1,38 @@
+import os
 
 import streamlit as st
+
+
+# ============================================================
+# Streamlit Secrets -> Environment
+# IMPORTANT:
+# This must happen BEFORE importing the workflow graph.
+# ============================================================
+
+SECRET_KEYS = (
+    "DB_BACKEND",
+    "DATABASE_URL",
+    "DIRECT_URL",
+    "SUPABASE_URL",
+    "SUPABASE_KEY",
+    "LLM_PROVIDER",
+    "LLM_MODEL",
+    "GEMINI_API_KEY",
+    "OLLAMA_HOST",
+)
+
+for key in SECRET_KEYS:
+
+    if key in st.secrets:
+
+        os.environ[key] = str(
+            st.secrets[key]
+        )
+
+
+# ============================================================
+# Application Imports
+# ============================================================
 
 from workflow.triage_graph import triage_graph
 from presentation.auth.login_view import render_login
@@ -21,7 +54,10 @@ st.set_page_config(
 # Authentication
 # ============================================================
 
-if not st.session_state.get("authenticated", False):
+if not st.session_state.get(
+    "authenticated",
+    False,
+):
 
     render_login()
     st.stop()
@@ -40,13 +76,18 @@ def create_initial_state() -> dict:
     """
 
     return {
+
         # ----------------------------------------------------
         # Authentication Context
         # ----------------------------------------------------
 
-        "user_id": st.session_state.get("user_id"),
+        "user_id": st.session_state.get(
+            "user_id"
+        ),
 
-        "patient_id": st.session_state.get("patient_id"),
+        "patient_id": st.session_state.get(
+            "patient_id"
+        ),
 
         "user_roles": st.session_state.get(
             "roles",
@@ -320,7 +361,9 @@ def render_hospital_admin_dashboard() -> None:
     Hospital administrator dashboard.
     """
 
-    st.subheader("Hospital Admin Dashboard")
+    st.subheader(
+        "Hospital Admin Dashboard"
+    )
 
     st.info(
         "Hospital administration features can be "
@@ -333,7 +376,9 @@ def render_system_admin_dashboard() -> None:
     System administrator dashboard.
     """
 
-    st.subheader("System Admin Dashboard")
+    st.subheader(
+        "System Admin Dashboard"
+    )
 
     st.info(
         "System administration features can be "
@@ -411,7 +456,10 @@ def build_triage_response(
         confidence = state["confidence"]
 
         if (
-            isinstance(confidence, float)
+            isinstance(
+                confidence,
+                float,
+            )
             and confidence <= 1
         ):
 
@@ -706,7 +754,6 @@ with st.sidebar:
 
 render_role_dashboard()
 
-
 st.divider()
 
 
@@ -972,4 +1019,3 @@ st.caption(
     "Medical AI Triage Prototype — "
     "Rule-based safety baseline + LLM-ready architecture"
 )
-

@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     supabase_key: str | None = None
 
     # =========================================================
-    # Settings
+    # Configuration
     # =========================================================
 
     model_config = SettingsConfigDict(
