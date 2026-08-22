@@ -1,26 +1,37 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from application.auth.login_service import LoginService
-from infrastructure.auth.auth_factory import create_login_service
+from application.config.settings import Settings
+from infrastructure.auth.auth_factory import (
+    create_login_service,
+)
+from infrastructure.auth.sql_auth_repository import (
+    SQLAuthRepository,
+)
 
 
 def test_create_login_service():
 
+    fake_session = Mock()
+
+    settings = Settings(
+        db_backend="sqlserver",
+    )
+
     with patch(
-        "infrastructure.auth.auth_factory.SessionLocal"
+        "infrastructure.database.session.SessionLocal",
+        return_value=fake_session,
     ) as session_factory:
 
-        session = session_factory.return_value
-
-        login_service, returned_session = (
-            create_login_service()
+        service, session = create_login_service(
+            settings
         )
 
-        assert isinstance(
-            login_service,
-            LoginService,
-        )
+    session_factory.assert_called_once()
 
-        assert returned_session is session
+    assert session is fake_session
+    assert service is not None
 
-        session_factory.assert_called_once()
+    assert (
+        service._auth_repository.__class__
+        is SQLAuthRepository
+    )

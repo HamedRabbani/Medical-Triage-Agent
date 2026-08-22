@@ -1,6 +1,5 @@
-from types import SimpleNamespace
-
 from application.auth.login_service import LoginService
+from application.ports.auth_port import AuthUser
 
 
 class FakePasswordService:
@@ -18,11 +17,14 @@ class FakePasswordService:
 
 class FakeAuthRepository:
 
-    def __init__(self, user=None):
+    def __init__(self, user: AuthUser | None = None):
         self.user = user
         self.requested_email = None
 
-    def get_user_by_email(self, email: str):
+    def get_user_by_email(
+        self,
+        email: str,
+    ) -> AuthUser | None:
         self.requested_email = email
         return self.user
 
@@ -34,22 +36,14 @@ def make_user(
     password_hash="HASH",
     status="Active",
     roles=("Patient",),
-):
-    role_assignments = [
-        SimpleNamespace(
-            role=SimpleNamespace(
-                role_name=role
-            )
-        )
-        for role in roles
-    ]
+) -> AuthUser:
 
-    return SimpleNamespace(
+    return AuthUser(
         user_id=user_id,
         email=email,
         password_hash=password_hash,
         status=status,
-        user_roles=role_assignments,
+        roles=tuple(roles),
     )
 
 
@@ -57,7 +51,9 @@ def test_login_success():
     user = make_user()
 
     repository = FakeAuthRepository(user)
-    password_service = FakePasswordService(valid=True)
+    password_service = FakePasswordService(
+        valid=True
+    )
 
     service = LoginService(
         auth_repository=repository,
@@ -75,7 +71,10 @@ def test_login_success():
     assert result.roles == ("Patient",)
     assert result.error is None
 
-    assert repository.requested_email == "test@example.com"
+    assert (
+        repository.requested_email
+        == "test@example.com"
+    )
 
 
 def test_login_fails_for_unknown_user():
@@ -94,14 +93,18 @@ def test_login_fails_for_unknown_user():
 
     assert result.success is False
     assert result.user_id is None
-    assert result.error == "Invalid email or password."
+    assert result.error == (
+        "Invalid email or password."
+    )
 
 
 def test_login_fails_for_wrong_password():
     user = make_user()
 
     repository = FakeAuthRepository(user)
-    password_service = FakePasswordService(valid=False)
+    password_service = FakePasswordService(
+        valid=False
+    )
 
     service = LoginService(
         auth_repository=repository,
@@ -115,7 +118,9 @@ def test_login_fails_for_wrong_password():
 
     assert result.success is False
     assert result.user_id is None
-    assert result.error == "Invalid email or password."
+    assert result.error == (
+        "Invalid email or password."
+    )
 
 
 def test_login_fails_for_inactive_account():
@@ -124,7 +129,9 @@ def test_login_fails_for_inactive_account():
     )
 
     repository = FakeAuthRepository(user)
-    password_service = FakePasswordService(valid=True)
+    password_service = FakePasswordService(
+        valid=True
+    )
 
     service = LoginService(
         auth_repository=repository,
@@ -138,7 +145,9 @@ def test_login_fails_for_inactive_account():
 
     assert result.success is False
     assert result.user_id is None
-    assert result.error == "Account is not active."
+    assert result.error == (
+        "Account is not active."
+    )
 
 
 def test_login_returns_all_roles():
@@ -150,7 +159,9 @@ def test_login_returns_all_roles():
     )
 
     repository = FakeAuthRepository(user)
-    password_service = FakePasswordService(valid=True)
+    password_service = FakePasswordService(
+        valid=True
+    )
 
     service = LoginService(
         auth_repository=repository,
@@ -164,8 +175,8 @@ def test_login_returns_all_roles():
 
     assert result.success is True
     assert result.roles == (
-        "Doctor",
         "Patient",
+        "Doctor",
     )
 
 
@@ -184,7 +195,9 @@ def test_login_rejects_empty_email():
     )
 
     assert result.success is False
-    assert result.error == "Invalid email or password."
+    assert result.error == (
+        "Invalid email or password."
+    )
 
 
 def test_login_rejects_empty_password():
@@ -202,4 +215,6 @@ def test_login_rejects_empty_password():
     )
 
     assert result.success is False
-    assert result.error == "Invalid email or password."
+    assert result.error == (
+        "Invalid email or password."
+    )

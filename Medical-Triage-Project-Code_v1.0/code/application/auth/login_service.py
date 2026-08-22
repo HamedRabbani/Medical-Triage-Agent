@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 
-from application.auth.password_service import PasswordService
-from infrastructure.auth.auth_repository import AuthRepository
+from application.auth.password_service import (
+    PasswordService,
+)
+from application.ports.auth_port import AuthPort
 
 
 @dataclass(frozen=True)
@@ -16,11 +18,14 @@ class LoginResult:
 class LoginService:
     """
     Application service responsible for user authentication.
+
+    Authentication persistence is provided through AuthPort,
+    so this service is independent of SQL Server or Supabase.
     """
 
     def __init__(
         self,
-        auth_repository: AuthRepository,
+        auth_repository: AuthPort,
         password_service: PasswordService,
     ) -> None:
         self._auth_repository = auth_repository
@@ -32,65 +37,76 @@ class LoginService:
         password: str,
     ) -> LoginResult:
 
-        normalized_email = email.strip().lower()
+        normalized_email = (
+            email.strip().lower()
+        )
+
+        # -----------------------------------------------------
+        # Input validation
+        # -----------------------------------------------------
 
         if not normalized_email or not password:
+
             return LoginResult(
                 success=False,
                 error="Invalid email or password.",
             )
 
-        user = self._auth_repository.get_user_by_email(
-            normalized_email
+        # -----------------------------------------------------
+        # Retrieve user
+        # -----------------------------------------------------
+
+        user = (
+            self._auth_repository
+            .get_user_by_email(
+                normalized_email
+            )
         )
 
         if user is None:
+
             return LoginResult(
                 success=False,
                 error="Invalid email or password.",
             )
 
-        # DEBUG - remove after testing
-        print("EMAIL:", user.email)
-        print("HASH:", user.password_hash)
-        print(
-            "VERIFY:",
-            self._password_service.verify_password(
-                password,
-                user.password_hash,
-            )
-        )
+        # -----------------------------------------------------
+        # Account status
+        # -----------------------------------------------------
 
         if user.status != "Active":
+
             return LoginResult(
                 success=False,
                 error="Account is not active.",
             )
 
-        password_valid = self._password_service.verify_password(
-            password,
-            user.password_hash,
+        # -----------------------------------------------------
+        # Password verification
+        # -----------------------------------------------------
+
+        password_valid = (
+            self._password_service
+            .verify_password(
+                password,
+                user.password_hash,
+            )
         )
 
         if not password_valid:
+
             return LoginResult(
                 success=False,
                 error="Invalid email or password.",
             )
 
-        roles = tuple(
-            sorted(
-                {
-                    assignment.role.role_name
-                    for assignment in user.user_roles
-                    if assignment.role is not None
-                }
-            )
-        )
+        # -----------------------------------------------------
+        # Successful authentication
+        # -----------------------------------------------------
 
         return LoginResult(
             success=True,
             user_id=user.user_id,
             email=user.email,
-            roles=roles,
+            roles=tuple(user.roles),
         )
