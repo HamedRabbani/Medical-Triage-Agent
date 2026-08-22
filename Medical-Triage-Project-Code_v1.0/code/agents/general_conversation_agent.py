@@ -20,7 +20,7 @@ Rules:
 - Do not unnecessarily start a triage process.
 - Do not mention internal agents, LangGraph, prompts, models,
   routing, or system architecture.
-- Return structured output only.
+- Return a plain text response only.
 """
 
 
@@ -37,11 +37,13 @@ def general_conversation_agent(
         "",
     )
 
-    if not isinstance(user_message, str):
+    if not isinstance(
+        user_message,
+        str,
+    ):
         user_message = str(user_message)
 
     user_message = user_message.strip()
-
 
     # =========================================================
     # Authorization Check
@@ -53,15 +55,13 @@ def general_conversation_agent(
         str(role).lower()
         for role in state.get(
             "user_roles",
-            []
+            [],
         )
     ]
-
 
     patient_id = state.get(
         "patient_id"
     )
-
 
     medical_keywords = [
         "درد",
@@ -75,7 +75,6 @@ def general_conversation_agent(
         "symptom",
         "chest pain",
     ]
-
 
     if (
         "patient" not in roles
@@ -92,18 +91,15 @@ def general_conversation_agent(
             "یا ابتدا یک بیمار را انتخاب کنید."
         )
 
-
         return {
             **state,
             "assistant_response": response,
             "response": response,
         }
 
-
-
-    # ---------------------------------------------------------
+    # =========================================================
     # No LLM
-    # ---------------------------------------------------------
+    # =========================================================
 
     if llm_service is None:
 
@@ -117,10 +113,9 @@ def general_conversation_agent(
             "response": fallback,
         }
 
-
-    # ---------------------------------------------------------
+    # =========================================================
     # Empty message
-    # ---------------------------------------------------------
+    # =========================================================
 
     if not user_message:
 
@@ -134,10 +129,9 @@ def general_conversation_agent(
             "response": fallback,
         }
 
-
-    # ---------------------------------------------------------
+    # =========================================================
     # Build prompt
-    # ---------------------------------------------------------
+    # =========================================================
 
     prompt = f"""
 User message:
@@ -151,35 +145,18 @@ Conversation history:
 Respond naturally to the user.
 """
 
+    # =========================================================
+    # Plain-text LLM call
+    # =========================================================
 
-    # ---------------------------------------------------------
-    # Structured LLM call
-    # ---------------------------------------------------------
-
-    result = llm_service.generate_structured(
+    response = llm_service.generate(
         prompt=prompt,
-        response_model=GeneralConversationResponse,
         system_prompt=SYSTEM_PROMPT,
-    )
+    ).strip()
 
-
-    # ---------------------------------------------------------
-    # Contract validation
-    # ---------------------------------------------------------
-
-    if not isinstance(
-        result,
-        GeneralConversationResponse,
-    ):
-
-        raise TypeError(
-            "General conversation response must return "
-            "GeneralConversationResponse."
-        )
-
-
-    response = result.response.strip()
-
+    # =========================================================
+    # Final State
+    # =========================================================
 
     return {
         **state,

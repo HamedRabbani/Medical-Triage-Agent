@@ -1,8 +1,13 @@
-
 import time
 
 from application.contracts.conversation_extraction import (
     ConversationExtraction,
+)
+from application.contracts.short_term_memory import (
+    ShortTermMemory,
+)
+from application.services.short_term_memory_service import (
+    ShortTermMemoryService,
 )
 
 from extractors.age_extractor import extract_age
@@ -70,9 +75,6 @@ def _is_active_triage(state):
     """
     Determine whether the system is already inside
     an active medical triage flow.
-
-    Active triage context has priority over the
-    current message classification.
     """
 
     if state.get("missing_information"):
@@ -92,8 +94,6 @@ def _is_profile_request(text: str) -> bool:
     """
     Detect whether the user is asking about
     their own profile/account information.
-
-    This is deterministic and does not require an LLM.
     """
 
     profile_keywords = [
@@ -295,7 +295,6 @@ def conversation_agent(
     )
 
     if message:
-
         history.append(
             {
                 "sender_type": "Patient",
@@ -347,13 +346,6 @@ def conversation_agent(
 
     # =========================================================
     # PROFILE
-    #
-    # IMPORTANT:
-    # Profile requests must NOT enter medical extraction.
-    # They must NOT be handled by RAG.
-    #
-    # The actual profile lookup will be handled by
-    # the application/profile service layer.
     # =========================================================
 
     if detected_intent == "PROFILE":
@@ -385,20 +377,11 @@ def conversation_agent(
         }
 
     # =========================================================
-    # Active Triage
+    # Intent
     #
     # IMPORTANT:
-    # Do NOT call Intent LLM here.
-    #
-    # Example:
-    #
-    # System:
-    # "How old are you?"
-    #
-    # User:
-    # "29"
-    #
-    # This must remain TRIAGE.
+    # Active triage remains TRIAGE,
+    # but it must continue to extraction.
     # =========================================================
 
     if _is_active_triage(state):
@@ -407,23 +390,10 @@ def conversation_agent(
             "[ROUTING] Active triage -> TRIAGE"
         )
 
-        return {
-            **state,
-            "conversation_history": history,
-            "intent": "TRIAGE",
-            "intent_confidence": 1.0,
-            "assistant_response": None,
-        }
+        intent = "TRIAGE"
+        confidence = 1.0
 
-    # =========================================================
-    # Deterministic TRIAGE
-    #
-    # Medical information was explicitly detected.
-    #
-    # Do NOT waste an Intent LLM call.
-    # =========================================================
-
-    if detected_intent == "TRIAGE":
+    elif detected_intent == "TRIAGE":
 
         print(
             "[ROUTING] Deterministic medical detection -> TRIAGE"
@@ -434,10 +404,6 @@ def conversation_agent(
 
     else:
 
-        # =====================================================
-        # Deterministic GENERAL
-        # =====================================================
-
         print(
             "[ROUTING] Deterministic GENERAL -> GENERAL"
         )
@@ -447,20 +413,6 @@ def conversation_agent(
             "conversation_history": history,
             "intent": "GENERAL",
             "intent_confidence": detected_confidence,
-            "assistant_response": None,
-        }
-
-    # =========================================================
-    # GENERAL
-    # =========================================================
-
-    if intent == "GENERAL":
-
-        return {
-            **state,
-            "conversation_history": history,
-            "intent": "GENERAL",
-            "intent_confidence": confidence,
             "assistant_response": None,
         }
 
@@ -508,98 +460,23 @@ Extract medical information from:
         )
 
     # =========================================================
-    # Symptoms
+    # Memory Update
     # =========================================================
 
-    existing_symptoms = list(
-        state.get("symptoms")
-        or []
+    memory = state.get(
+        "short_term_memory"
     )
 
-    extracted_symptoms = list(
-        extraction_result.symptoms
-        or []
-    )
-
-    symptoms = list(
-        dict.fromkeys(
-            existing_symptoms
-            + extracted_symptoms
-        )
-    )
-
-    # =========================================================
-    # Age
-    # =========================================================
-
-    age = extraction_result.age
-
-    if age is None:
-
-        age = extract_age(
-            normalize_text(message)
+    if memory is None:
+        memory = ShortTermMemory(
+            session_id=state.get("session_id"),
         )
 
-    if age is None:
+    memory_service = ShortTermMemoryService()
 
-        age = state.get(
-            "age"
-        )
-
-    # =========================================================
-    # Severity
-    # =========================================================
-
-    severity = extraction_result.severity
-
-    if severity is None:
-
-        severity = extract_severity(
-            normalize_text(message)
-        )
-
-    if severity is None:
-
-        severity = state.get(
-            "severity"
-        )
-
-    # =========================================================
-    # Duration
-    # =========================================================
-
-    duration = extraction_result.duration
-
-    if duration is None:
-
-        duration = extract_duration(
-            normalize_text(message)
-        )
-
-    if duration is None:
-
-        duration = state.get(
-            "duration"
-        )
-
-    # =========================================================
-    # Red Flags
-    # =========================================================
-
-    red_flags = list(
-        dict.fromkeys(
-            list(
-                state.get(
-                    "red_flags"
-                )
-                or []
-            )
-            +
-            list(
-                extraction_result.red_flags
-                or []
-            )
-        )
+    memory = memory_service.update(
+        memory=memory,
+        extraction=extraction_result,
     )
 
     # =========================================================
@@ -611,19 +488,31 @@ Extract medical information from:
 
         "conversation_history": history,
 
-        "intent": "TRIAGE",
+        "short_term_memory": memory,
+
+        "intent": intent,
 
         "intent_confidence": confidence,
 
-        "symptoms": symptoms,
+        "symptoms": (
+            memory.medical_context.symptoms
+        ),
 
-        "age": age,
+        "age": (
+            memory.medical_context.age
+        ),
 
-        "severity": severity,
+        "duration": (
+            memory.medical_context.duration
+        ),
 
-        "duration": duration,
+        "severity": (
+            memory.medical_context.severity
+        ),
 
-        "red_flags": red_flags,
+        "red_flags": (
+            memory.medical_context.red_flags
+        ),
 
         "assistant_response": None,
     }

@@ -1,19 +1,22 @@
-from infrastructure.database.session import SessionLocal
-from infrastructure.database.unit_of_work import UnitOfWork
-
-from application.services.triage_service import TriageService
-from application.services.triage_agent_service import TriageAgentService
-from application.services.conversation_service import ConversationService
-
+from application.services.conversation_service import (
+    ConversationService,
+)
 from application.services.short_term_memory_service import (
     ShortTermMemoryService,
 )
+from application.services.triage_agent_service import (
+    TriageAgentService,
+)
+from application.services.triage_service import (
+    TriageService,
+)
 
 
-def session_agent(state):
-    """Create or reuse triage session, save user message,
-    and load conversation history.
-    """
+def session_agent(
+    state,
+    database_backend,
+):
+    """Create/reuse session, persist message and load memory."""
 
     patient_id = state.get("patient_id")
     session_id = state.get("session_id")
@@ -25,62 +28,56 @@ def session_agent(state):
     if not user_message:
         return state
 
-    with SessionLocal() as session:
+    triage_service = TriageService(
+        database_backend.triage
+    )
 
-        uow = UnitOfWork(session)
+    agent_service = TriageAgentService(
+        triage_service
+    )
 
-        triage_service = TriageService(uow)
+    conversation_service = ConversationService(
+        database_backend.conversation
+    )
 
-        agent_service = TriageAgentService(
-            triage_service
-        )
+    memory_service = ShortTermMemoryService()
 
-        conversation_service = ConversationService(
-            uow
-        )
-        memory_service = ShortTermMemoryService(
-        conversation_service
-        )
+    if session_id is None:
 
-        # -------------------------
-        # 1. Create or reuse session
-        # -------------------------
-
-        if session_id is None:
-
-            triage_session = (
-                agent_service.create_session(
-                    patient_id
-                )
+        triage_session = (
+            agent_service.create_session(
+                patient_id
             )
-
-            session_id = triage_session.session_id
-
-        # -------------------------
-        # 2. Save current message
-        # -------------------------
-
-        agent_service.add_message(
-            session_id=session_id,
-            content=user_message,
-            sender_type="Patient",
         )
 
-        # -------------------------
-        # 3. Load conversation history
-        # -------------------------
+        database_backend.triage.commit()
 
-        short_term_memory = memory_service.load(
+        session_id = (
+            triage_session.session_id
+        )
+
+    agent_service.add_message(
+        session_id=session_id,
+        content=user_message,
+        sender_type="Patient",
+    )
+
+    database_backend.triage.commit()
+
+    history = conversation_service.get_history(
         session_id
-        )
+    )
 
-    # -------------------------
-    # 4. Update LangGraph State
-    # -------------------------
+    short_term_memory = memory_service.load(
+        session_id=session_id,
+        history=history,
+    )
 
     return {
         **state,
         "session_id": session_id,
-        "conversation_history": short_term_memory.recent_messages,
+        "conversation_history": (
+            short_term_memory.recent_messages
+        ),
         "short_term_memory": short_term_memory,
     }
