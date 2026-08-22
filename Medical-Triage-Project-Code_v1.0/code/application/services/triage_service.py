@@ -1,49 +1,43 @@
-from datetime import datetime, UTC
-
-from infrastructure.database.models.conversation_msg import ConversationMsg
-from infrastructure.database.models.triage_result import TriageResult
-from infrastructure.database.models.triage_session import TriageSession
-from infrastructure.database.unit_of_work import UnitOfWork
+from application.ports.triage_persistence_port import (
+    TriagePersistencePort,
+)
 
 
 class TriageService:
     """Application service for triage use cases."""
 
-    def __init__(self, uow: UnitOfWork):
-        self.uow = uow
+    def __init__(
+        self,
+        persistence: TriagePersistencePort,
+    ):
+        self.persistence = persistence
 
     def start_session(
         self,
         patient_id: int,
-    ) -> TriageSession:
+    ):
         """Create a new triage session."""
 
-        patient = self.uow.patients.get_by_id(patient_id)
-
-        if patient is None:
+        if not self.persistence.patient_exists(
+            patient_id
+        ):
             raise ValueError(
                 f"Patient {patient_id} does not exist."
             )
 
-        triage_session = TriageSession(
-            patient_id=patient_id,
-            start_time=datetime.now(UTC),
-            status="Active",
+        return self.persistence.create_session(
+            patient_id
         )
-
-        self.uow.triage.add(triage_session)
-
-        return triage_session
 
     def add_message(
         self,
         session_id: int,
         sender_type: str,
         content: str,
-    ) -> ConversationMsg:
+    ):
         """Add a message to an existing triage session."""
 
-        triage_session = self.uow.triage.get_by_id(
+        triage_session = self.persistence.get_session(
             session_id
         )
 
@@ -52,16 +46,11 @@ class TriageService:
                 f"Triage session {session_id} does not exist."
             )
 
-        message = ConversationMsg(
+        return self.persistence.add_message(
             session_id=session_id,
             sender_type=sender_type,
             content=content,
-            timestamp=datetime.now(UTC),
         )
-
-        self.uow.triage.add_message(message)
-
-        return message
 
     def save_result(
         self,
@@ -69,10 +58,10 @@ class TriageService:
         risk_level: str,
         confidence_score: float,
         recommendation: str,
-    ) -> TriageResult:
+    ):
         """Persist a triage result."""
 
-        triage_session = self.uow.triage.get_by_id(
+        triage_session = self.persistence.get_session(
             session_id
         )
 
@@ -81,17 +70,12 @@ class TriageService:
                 f"Triage session {session_id} does not exist."
             )
 
-        result = TriageResult(
+        return self.persistence.add_result(
             session_id=session_id,
             risk_level=risk_level,
             confidence_score=confidence_score,
             recommendation=recommendation,
-            created_at=datetime.now(UTC),
         )
-
-        self.uow.triage.add_result(result)
-
-        return result
 
     def process_triage(
         self,
@@ -101,30 +85,29 @@ class TriageService:
         confidence_score: float,
         recommendation: str,
         session_id: int | None = None,
-    ) -> dict:
+    ):
         """Process triage using a new or existing session."""
 
         try:
-            # ---------------------------------
-            # Create a new session when needed
-            # ---------------------------------
+            # -------------------------------------------------
+            # Create new session
+            # -------------------------------------------------
+
             if session_id is None:
 
                 session = self.start_session(
                     patient_id
                 )
 
-                # Generate SessionId
-                self.uow.session.flush()
-
                 session_id = session.session_id
 
-            # ---------------------------------
+            # -------------------------------------------------
             # Verify existing session
-            # ---------------------------------
+            # -------------------------------------------------
+
             else:
 
-                session = self.uow.triage.get_by_id(
+                session = self.persistence.get_session(
                     session_id
                 )
 
@@ -140,9 +123,10 @@ class TriageService:
                         "to the specified patient."
                     )
 
-            # ---------------------------------
-            # Save final triage result
-            # ---------------------------------
+            # -------------------------------------------------
+            # Save result
+            # -------------------------------------------------
+
             result = self.save_result(
                 session_id=session_id,
                 risk_level=risk_level,
@@ -150,15 +134,14 @@ class TriageService:
                 recommendation=recommendation,
             )
 
-            # ---------------------------------
-            # Commit transaction
-            # ---------------------------------
-            self.uow.commit()
+            # -------------------------------------------------
+            # Commit
+            # -------------------------------------------------
+
+            self.persistence.commit()
 
             return result
 
         except Exception:
-            self.uow.rollback()
+            self.persistence.rollback()
             raise
-
-     

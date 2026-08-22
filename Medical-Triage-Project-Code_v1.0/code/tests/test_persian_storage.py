@@ -2,14 +2,20 @@ from infrastructure.database.session import SessionLocal
 from infrastructure.database.unit_of_work import UnitOfWork
 
 from application.services.triage_service import TriageService
-
+from infrastructure.database.repositories.sql_triage_persistence_repository import (
+    SQLTriagePersistenceRepository,
+)
 
 def test_persian_storage():
     with SessionLocal() as session:
 
         uow = UnitOfWork(session)
 
-        triage_service = TriageService(uow)
+        persistence = SQLTriagePersistenceRepository(uow)
+
+        triage_service = TriageService(
+            persistence
+        )
 
         triage_session = triage_service.start_session(2)
 

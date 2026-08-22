@@ -4,38 +4,22 @@ from application.contracts.conversation_extraction import (
 from application.contracts.short_term_memory import (
     ShortTermMemory,
 )
-from application.services.conversation_service import (
-    ConversationService,
-)
+from application.ports.memory_port import MemoryPort
 
 
-class ShortTermMemoryService:
-    """Build and update short-term memory."""
-
-    def __init__(
-        self,
-        conversation_service: ConversationService | None = None,
-    ):
-        self.conversation_service = conversation_service
+class ShortTermMemoryService(MemoryPort):
+    """Build and update session-scoped short-term memory."""
 
     def load(
         self,
         session_id: int,
+        history: list[dict],
     ) -> ShortTermMemory:
-        """Load short-term memory for a session."""
-
-        if self.conversation_service is None:
-            raise ValueError(
-                "ConversationService is required to load memory."
-            )
-
-        history = self.conversation_service.get_history(
-            session_id
-        )
+        """Reconstruct short-term memory from persisted conversation."""
 
         return ShortTermMemory(
             session_id=session_id,
-            recent_messages=history,
+            recent_messages=list(history),
             medical_context=ConversationExtraction(),
         )
 
@@ -44,7 +28,7 @@ class ShortTermMemoryService:
         memory: ShortTermMemory,
         extraction: ConversationExtraction,
     ) -> ShortTermMemory:
-        """Merge newly extracted medical information."""
+        """Merge newly extracted information into current memory."""
 
         medical = memory.medical_context
 
@@ -60,27 +44,29 @@ class ShortTermMemoryService:
             if flag not in red_flags:
                 red_flags.append(flag)
 
+        updated_context = ConversationExtraction(
+            symptoms=symptoms,
+            severity=(
+                extraction.severity
+                if extraction.severity is not None
+                else medical.severity
+            ),
+            age=(
+                extraction.age
+                if extraction.age is not None
+                else medical.age
+            ),
+            duration=(
+                extraction.duration
+                if extraction.duration is not None
+                else medical.duration
+            ),
+            red_flags=red_flags,
+        )
+
         return ShortTermMemory(
             session_id=memory.session_id,
-            recent_messages=memory.recent_messages,
+            recent_messages=list(memory.recent_messages),
             intent=memory.intent,
-            medical_context=ConversationExtraction(
-                symptoms=symptoms,
-                severity=(
-                    extraction.severity
-                    if extraction.severity is not None
-                    else medical.severity
-                ),
-                age=(
-                    extraction.age
-                    if extraction.age is not None
-                    else medical.age
-                ),
-                duration=(
-                    extraction.duration
-                    if extraction.duration is not None
-                    else medical.duration
-                ),
-                red_flags=red_flags,
-            ),
+            medical_context=updated_context,
         )

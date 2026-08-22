@@ -1,67 +1,157 @@
-from application.contracts.general_chat_response import (
-    GeneralChatResponse,
-)
-
-
 SYSTEM_PROMPT = """
-You are the general conversation assistant of a medical triage system.
+You are a general conversation assistant.
 
-Your job is to handle casual and non-triage conversation.
+Reply naturally, briefly, and in the same language as the user.
 
-Examples:
-- greetings
-- asking what the system can do
-- asking how the system works
-- casual conversation
-- non-medical general questions
-
-Important safety rules:
+Rules:
 - Do not diagnose diseases.
 - Do not make medical risk decisions.
-- Do not determine triage severity.
-- Do not override the triage workflow.
-- If the user describes symptoms or asks for medical advice,
-  provide a brief response indicating that the medical triage
-  workflow should handle the request.
+- If the user reports symptoms or asks for medical advice,
+  the medical triage workflow should handle the request.
 - Never claim to be a doctor.
-
-Return a concise and natural response.
 """
 
 
 def general_conversation_agent(
     state,
-    llm_service,
+    llm_service=None,
 ):
     """
-    Handle non-triage conversation.
+    Handle GENERAL conversation.
 
-    This agent must never modify medical triage state.
+    General conversation uses plain-text generation.
+    Structured output is reserved for machine-readable
+    medical extraction and risk assessment.
     """
 
-    user_message = state.get("user_message", "")
+    user_message = state.get(
+        "user_message",
+        "",
+    )
 
-    if not user_message:
+    if not isinstance(
+        user_message,
+        str,
+    ):
+        user_message = str(user_message)
+
+    user_message = user_message.strip()
+
+    # =========================================================
+    # Authorization context
+    # =========================================================
+
+    roles = [
+        str(role).lower()
+        for role in state.get(
+            "user_roles",
+            [],
+        )
+    ]
+
+    patient_id = state.get(
+        "patient_id"
+    )
+
+    # =========================================================
+    # Medical request without patient context
+    # =========================================================
+
+    medical_keywords = [
+        "درد",
+        "تب",
+        "سردرد",
+        "قفسه سینه",
+        "علائم",
+        "بیماری",
+        "pain",
+        "fever",
+        "symptom",
+        "chest pain",
+    ]
+
+    if (
+        "patient" not in roles
+        and patient_id is None
+        and any(
+            keyword in user_message.lower()
+            for keyword in medical_keywords
+        )
+    ):
+        response = (
+            "برای انجام ارزیابی پزشکی، "
+            "لطفاً با حساب بیمار وارد شوید "
+            "یا ابتدا یک بیمار را انتخاب کنید."
+        )
+
         return {
             **state,
-            "general_response": "",
+            "assistant_response": response,
+            "response": response,
         }
 
-    prompt = f"""
-User message:
+    # =========================================================
+    # No LLM
+    # =========================================================
 
-{user_message}
+    if llm_service is None:
+        response = (
+            "سلام. چطور می‌توانم کمکتان کنم؟"
+        )
 
-Respond naturally as the general conversation assistant.
-"""
+        return {
+            **state,
+            "assistant_response": response,
+            "response": response,
+        }
 
-    result = llm_service.generate_structured(
+    # =========================================================
+    # Empty message
+    # =========================================================
+
+    if not user_message:
+        response = (
+            "سلام. چطور می‌توانم کمکتان کنم؟"
+        )
+
+        return {
+            **state,
+            "assistant_response": response,
+            "response": response,
+        }
+
+    # =========================================================
+    # Plain prompt
+    # =========================================================
+
+    prompt = user_message
+
+    # =========================================================
+    # Plain-text generation
+    # =========================================================
+
+    response = llm_service.generate(
         prompt=prompt,
-        response_model=GeneralChatResponse,
         system_prompt=SYSTEM_PROMPT,
     )
 
+    if not isinstance(
+        response,
+        str,
+    ):
+        raise TypeError(
+            "General conversation response must be a string."
+        )
+
+    response = response.strip()
+
+    if not response:
+        response = (
+            "متوجه شدم. چطور می‌توانم کمکتان کنم؟"
+        )
+
     return {
         **state,
-        "general_response": result.response,
+        "assistant_response": response,
+        "response": response,
     }

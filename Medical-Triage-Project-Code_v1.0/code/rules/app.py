@@ -1,5 +1,5 @@
 import streamlit as st
-
+import time
 from workflow.triage_graph import triage_graph
 
 
@@ -89,9 +89,18 @@ if user_message:
     current_state["skip_persistence"] = True
 
 
+    # result = triage_graph.invoke(
+    #     current_state
+    # )
+    start_time = time.perf_counter()
+
     result = triage_graph.invoke(
         current_state
     )
+
+    total_latency = time.perf_counter() - start_time
+
+    print(f"[LATENCY] Total Graph: {total_latency:.2f}s")
 
     st.session_state.triage_state = result
 

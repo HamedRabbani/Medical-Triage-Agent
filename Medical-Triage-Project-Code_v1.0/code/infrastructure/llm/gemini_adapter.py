@@ -17,7 +17,9 @@ class GeminiAdapter(LLMPort):
         api_key: str,
         model: str,
     ) -> None:
-        self._client = genai.Client(api_key=api_key)
+        self._client = genai.Client(
+            api_key=api_key
+        )
         self._model = model
 
     def generate(
@@ -56,7 +58,9 @@ class GeminiAdapter(LLMPort):
         )
 
         if system_prompt:
-            config.system_instruction = system_prompt
+            config.system_instruction = (
+                system_prompt
+            )
 
         response = self._client.models.generate_content(
             model=self._model,

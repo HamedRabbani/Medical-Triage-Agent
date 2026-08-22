@@ -1,13 +1,6 @@
 from unittest.mock import Mock
 
-from application.contracts.conversation_intent import (
-    ConversationIntent,
-)
-from application.contracts.general_conversation_response import (
-    GeneralConversationResponse,
-)
 from application.services.llm_service import LLMService
-
 from workflow.triage_graph import build_triage_graph
 
 
@@ -17,21 +10,17 @@ def test_general_conversation_flow():
     # Fake LLM
     # =========================================================
 
-    mock_llm_service = Mock(spec=LLMService)
-
-    intent_result = ConversationIntent(
-        intent="GENERAL",
-        confidence=0.99,
+    mock_llm_service = Mock(
+        spec=LLMService
     )
 
-    response_result = GeneralConversationResponse(
-        response="Hello. How can I help you?"
-    )
+    # Current architecture:
+    # Intent detection is deterministic.
+    # General conversation uses plain-text generation.
 
-    mock_llm_service.generate_structured.side_effect = [
-        intent_result,
-        response_result,
-    ]
+    mock_llm_service.generate.return_value = (
+        "Hello. How can I help you?"
+    )
 
     # =========================================================
     # Build Graph
@@ -58,16 +47,21 @@ def test_general_conversation_flow():
         "symptoms": [],
         "severity": None,
         "duration": None,
-        "red_flags": [],
 
+        "red_flags": [],
         "missing_information": [],
+        "next_question": None,
+
+        "conversation_history": [],
     }
 
     # =========================================================
     # Execute
     # =========================================================
 
-    result = graph.invoke(state)
+    result = graph.invoke(
+        state
+    )
 
     # =========================================================
     # Intent
@@ -75,7 +69,10 @@ def test_general_conversation_flow():
 
     assert result["intent"] == "GENERAL"
 
-    assert result["intent_confidence"] == 0.99
+    assert (
+        result["intent_confidence"]
+        == 0.9
+    )
 
     # =========================================================
     # Response
@@ -90,17 +87,26 @@ def test_general_conversation_flow():
     # Triage must NOT execute
     # =========================================================
 
-    assert "risk_level" not in result
+    assert result.get(
+        "risk_level"
+    ) is None
 
-    assert "llm_risk_level" not in result
+    assert result.get(
+        "llm_risk_level"
+    ) is None
 
     # =========================================================
-    # LLM calls
+    # LLM Calls
     # =========================================================
+
+    assert (
+        mock_llm_service.generate.call_count
+        == 1
+    )
 
     assert (
         mock_llm_service
         .generate_structured
         .call_count
-        == 2
+        == 0
     )

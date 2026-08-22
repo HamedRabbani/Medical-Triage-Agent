@@ -4,7 +4,10 @@ from application.services.triage_service import TriageService
 class TriageAgentService:
     """Bridge between LangGraph and application services."""
 
-    def __init__(self, triage_service: TriageService):
+    def __init__(
+        self,
+        triage_service: TriageService,
+    ):
         self.triage_service = triage_service
 
     def create_session(
@@ -13,13 +16,9 @@ class TriageAgentService:
     ):
         """Create a new triage session."""
 
-        session = self.triage_service.start_session(
+        return self.triage_service.start_session(
             patient_id
         )
-
-        self.triage_service.uow.commit()
-
-        return session
 
     def add_message(
         self,
@@ -29,15 +28,11 @@ class TriageAgentService:
     ):
         """Persist a conversation message."""
 
-        message = self.triage_service.add_message(
+        return self.triage_service.add_message(
             session_id=session_id,
             sender_type=sender_type,
             content=content,
         )
-
-        self.triage_service.uow.commit()
-
-        return message
 
     def save_triage_result(
         self,

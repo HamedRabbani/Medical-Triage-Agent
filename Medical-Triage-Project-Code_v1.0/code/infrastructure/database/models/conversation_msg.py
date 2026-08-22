@@ -1,7 +1,13 @@
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, Text
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    ForeignKey,
+    String,
+    UnicodeText,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..base import Base
@@ -35,7 +41,7 @@ class ConversationMsg(Base):
 
     content: Mapped[str] = mapped_column(
         "Content",
-        Text,
+        UnicodeText,
         nullable=False,
     )
 

@@ -1,27 +1,9 @@
-
 import re
 
 from utils.text_normalizer import normalize_text
 
 
 SEVERITY_PATTERNS = {
-
-    # =========================================================
-    # Severe
-    # =========================================================
-
-    "severe": [
-        r"\bsevere\b",
-        r"\bvery\s+severe\b",
-        r"\bvery\s+painful\b",
-        r"\bterrible\b",
-
-        r"(?<![\w\u0600-\u06FF])شدید(?![\w\u0600-\u06FF])",
-        r"خیلی\s+شدید",
-        r"خیلی\s+درد\s+دارم",
-        r"دردم\s+شدیده",
-    ],
-
     # =========================================================
     # Moderate
     # =========================================================
@@ -33,6 +15,30 @@ SEVERITY_PATTERNS = {
         r"(?<![\w\u0600-\u06FF])متوسط(?![\w\u0600-\u06FF])",
         r"(?<![\w\u0600-\u06FF])معمولی(?![\w\u0600-\u06FF])",
         r"نه\s+کم\s+نه\s+زیاد",
+    ],
+
+    # =========================================================
+    # Severe
+    # =========================================================
+
+    "severe": [
+        r"\bsevere\b",
+        r"\bvery\s+severe\b",
+        r"\bvery\s+painful\b",
+        r"\bterrible\b",
+        r"\ba\s+lot\b",
+        r"\balot\b",
+
+        r"(?<![\w\u0600-\u06FF])شدید(?![\w\u0600-\u06FF])",
+        r"خیلی\s+شدید",
+        r"خیلی\s+درد\s+دارم",
+        r"دردم\s+شدیده",
+        r"خیلی\s+زیاده",
+        r"خیلی\s+زیاد",
+        r"خیلی\s+زیاد\s+است",
+
+        r"(?<![\w\u0600-\u06FF])زیاد(?![\w\u0600-\u06FF])",
+        r"زیاد\s+است",
     ],
 
     # =========================================================
@@ -52,7 +58,9 @@ SEVERITY_PATTERNS = {
 }
 
 
-def extract_severity(text: str) -> str | None:
+def extract_severity(
+    text: str,
+) -> str | None:
     """
     Extract explicitly stated symptom severity.
 
@@ -72,24 +80,15 @@ def extract_severity(text: str) -> str | None:
         return None
 
     # =========================================================
-    # Severe
-    # =========================================================
-
-    for pattern in SEVERITY_PATTERNS["severe"]:
-
-        if re.search(
-            pattern,
-            text,
-            flags=re.IGNORECASE,
-        ):
-            return "severe"
-
-    # =========================================================
-    # Moderate
+    # IMPORTANT:
+    # Check moderate before severe because:
+    #
+    # "نه کم نه زیاد"
+    #
+    # contains "زیاد" but means moderate.
     # =========================================================
 
     for pattern in SEVERITY_PATTERNS["moderate"]:
-
         if re.search(
             pattern,
             text,
@@ -98,11 +97,22 @@ def extract_severity(text: str) -> str | None:
             return "moderate"
 
     # =========================================================
+    # Severe
+    # =========================================================
+
+    for pattern in SEVERITY_PATTERNS["severe"]:
+        if re.search(
+            pattern,
+            text,
+            flags=re.IGNORECASE,
+        ):
+            return "severe"
+
+    # =========================================================
     # Mild
     # =========================================================
 
     for pattern in SEVERITY_PATTERNS["mild"]:
-
         if re.search(
             pattern,
             text,

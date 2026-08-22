@@ -3,9 +3,6 @@ from unittest.mock import Mock
 from application.contracts.conversation_extraction import (
     ConversationExtraction,
 )
-from application.contracts.conversation_intent import (
-    ConversationIntent,
-)
 from application.contracts.llm_risk_assessment import (
     LLMRiskAssessment,
 )
@@ -17,11 +14,6 @@ def test_conversation_to_triage_flow():
 
     mock_llm_service = Mock(
         spec=LLMService
-    )
-
-    intent_result = ConversationIntent(
-        intent="TRIAGE",
-        confidence=0.99,
     )
 
     extraction_result = ConversationExtraction(
@@ -48,7 +40,6 @@ def test_conversation_to_triage_flow():
     )
 
     mock_llm_service.generate_structured.side_effect = [
-        intent_result,
         extraction_result,
         risk_result,
     ]
@@ -70,6 +61,7 @@ def test_conversation_to_triage_flow():
         "duration": None,
         "red_flags": [],
         "missing_information": [],
+        "next_question": None,
         "conversation_history": [],
     }
 
@@ -96,5 +88,5 @@ def test_conversation_to_triage_flow():
         mock_llm_service
         .generate_structured
         .call_count
-        == 3
+        == 2
     )

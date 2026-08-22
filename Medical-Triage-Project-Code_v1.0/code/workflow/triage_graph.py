@@ -1,6 +1,7 @@
 from application.config.settings import Settings
 from application.config.llm_provider import build_llm
-from langgraph.graph import StateGraph, END
+
+from langgraph.graph import END, StateGraph
 
 from state.triage_state import TriageState
 
@@ -16,8 +17,28 @@ from agents.risk_agent import risk_agent
 from agents.supervisor_agent import supervisor_agent
 from agents.persistence_agent import persistence_agent
 
-from application.config.llm_config import LLMConfig
-from infrastructure.llm.llm_factory import create_llm
+from infrastructure.database.conversation_persistence_factory import (
+    create_database_backend,
+)
+
+
+# =============================================================
+# Active Triage Detection
+# =============================================================
+
+def _is_active_triage(state) -> bool:
+    """
+    Determine whether the conversation is already
+    inside an active medical triage flow.
+    """
+
+    if state.get("missing_information"):
+        return True
+
+    if state.get("next_question") is not None:
+        return True
+
+    return False
 
 
 # =============================================================
@@ -25,6 +46,22 @@ from infrastructure.llm.llm_factory import create_llm
 # =============================================================
 
 def route_intent(state):
+    """
+    Route the conversation after intent detection.
+
+    Active triage has priority over GENERAL.
+    """
+
+    # ---------------------------------------------------------
+    # Active triage always remains TRIAGE
+    # ---------------------------------------------------------
+
+    if _is_active_triage(state):
+        return "triage"
+
+    # ---------------------------------------------------------
+    # Normal intent routing
+    # ---------------------------------------------------------
 
     intent = str(
         state.get("intent") or ""
@@ -70,7 +107,6 @@ def general_conversation(
     state,
     llm_service=None,
 ):
-
     return general_conversation_agent(
         state,
         llm_service=llm_service,
@@ -115,24 +151,37 @@ def debug_risk_state(state):
 
 def build_triage_graph(
     llm_service=None,
-    short_term_memory_service=None,
+    database_backend=None,
 ):
 
     graph = StateGraph(
         TriageState
     )
 
+    settings = Settings()
+
+    # ---------------------------------------------------------
+    # Database Backend
+    # ---------------------------------------------------------
+
+    backend = database_backend
+
+    if backend is None:
+        backend = create_database_backend(
+            settings
+        )
+
     # =========================================================
     # Session
-    #
-    # Session must be created before intent routing.
-    # GENERAL conversations also belong to a conversation
-    # session and therefore require a session_id.
     # =========================================================
 
     graph.add_node(
         "session",
-        session_agent,
+        lambda state:
+            session_agent(
+                state,
+                database_backend=backend,
+            ),
     )
 
     # =========================================================
@@ -147,7 +196,6 @@ def build_triage_graph(
                 llm_service=llm_service,
             ),
     )
-        
 
     # =========================================================
     # General Conversation
@@ -197,7 +245,11 @@ def build_triage_graph(
 
     graph.add_node(
         "persistence",
-        persistence_agent,
+        lambda state:
+            persistence_agent(
+                state,
+                database_backend=backend,
+            ),
     )
 
     # =========================================================
@@ -295,6 +347,11 @@ llm_service = build_llm(
 # Global Graph
 # =============================================================
 
+database_backend = create_database_backend(
+    settings
+)
+
 triage_graph = build_triage_graph(
-    llm_service=llm_service
+    llm_service=llm_service,
+    database_backend=database_backend,
 )
