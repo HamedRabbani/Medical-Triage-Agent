@@ -1,13 +1,19 @@
 from application.contracts.conversation_extraction import (
     ConversationExtraction,
 )
+
 from application.contracts.memory_context import (
     MemoryContext,
 )
+
 from application.contracts.short_term_memory import (
     ShortTermMemory,
 )
-from application.ports.memory_port import MemoryPort
+
+from application.ports.memory_port import (
+    MemoryPort,
+)
+
 from application.services.short_term_memory_service import (
     ShortTermMemoryService,
 )
@@ -23,9 +29,11 @@ class MemoryService(MemoryPort):
         triage_repository,
     ):
         self.patient_repository = patient_repository
+
         self.medical_record_repository = (
             medical_record_repository
         )
+
         self.triage_repository = triage_repository
 
         self.short_term_memory_service = (
@@ -37,6 +45,7 @@ class MemoryService(MemoryPort):
         session_id: int,
         history: list[dict],
     ) -> ShortTermMemory:
+
         return self.short_term_memory_service.load(
             session_id=session_id,
             history=history,
@@ -47,6 +56,7 @@ class MemoryService(MemoryPort):
         memory: ShortTermMemory,
         extraction: ConversationExtraction,
     ) -> ShortTermMemory:
+
         return self.short_term_memory_service.update(
             memory=memory,
             extraction=extraction,
@@ -64,18 +74,23 @@ class MemoryService(MemoryPort):
             history=history,
         )
 
-        patient = self.patient_repository.get_by_id(
-            patient_id
+        patient = (
+            self.patient_repository
+            .get_patient_by_id(
+                patient_id
+            )
         )
 
         medical_records = (
-            self.medical_record_repository.get_by_patient_id(
+            self.medical_record_repository
+            .get_by_patient_id(
                 patient_id
             )
         )
 
         triage_results = (
-            self.triage_repository.get_results_by_patient_id(
+            self.triage_repository
+            .get_results_by_patient_id(
                 patient_id
             )
         )
@@ -83,6 +98,7 @@ class MemoryService(MemoryPort):
         patient_profile = None
 
         if patient is not None:
+
             patient_profile = {
                 "patient_id": patient.patient_id,
                 "user_id": patient.user_id,

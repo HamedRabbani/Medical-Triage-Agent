@@ -4,7 +4,12 @@ from application.services.memory_service import MemoryService
 
 
 class FakeShortTermMemoryService:
-    def load(self, session_id, history):
+
+    def load(
+        self,
+        session_id,
+        history,
+    ):
         return {
             "session_id": session_id,
             "recent_messages": history,
@@ -12,6 +17,7 @@ class FakeShortTermMemoryService:
 
 
 class FakePatient:
+
     patient_id = 1
     user_id = 10
     first_name = "Hamed"
@@ -21,6 +27,7 @@ class FakePatient:
 
 
 class FakeRecord:
+
     record_id = 100
     patient_id = 1
     condition = "Headache"
@@ -30,6 +37,7 @@ class FakeRecord:
 
 
 class FakeTriageResult:
+
     result_id = 200
     session_id = 50
     risk_level = "Low"
@@ -39,26 +47,54 @@ class FakeTriageResult:
 
 
 class FakePatientRepository:
-    def get_by_id(self, patient_id):
+
+    def get_patient_by_id(
+        self,
+        patient_id,
+    ):
         return FakePatient()
+
+    def get_by_id(
+        self,
+        patient_id,
+    ):
+        return self.get_patient_by_id(
+            patient_id
+        )
 
 
 class FakeMedicalRecordRepository:
-    def get_by_patient_id(self, patient_id):
-        return [FakeRecord()]
+
+    def get_by_patient_id(
+        self,
+        patient_id,
+    ):
+        return [
+            FakeRecord()
+        ]
 
 
 class FakeTriageRepository:
-    def get_results_by_patient_id(self, patient_id):
-        return [FakeTriageResult()]
+
+    def get_results_by_patient_id(
+        self,
+        patient_id,
+    ):
+        return [
+            FakeTriageResult()
+        ]
 
 
 def test_retrieve_memory_context():
 
     service = MemoryService(
         patient_repository=FakePatientRepository(),
-        medical_record_repository=FakeMedicalRecordRepository(),
-        triage_repository=FakeTriageRepository(),
+        medical_record_repository=(
+            FakeMedicalRecordRepository()
+        ),
+        triage_repository=(
+            FakeTriageRepository()
+        ),
     )
 
     service.short_term_memory_service = (
@@ -78,13 +114,31 @@ def test_retrieve_memory_context():
 
     assert context.short_term.session_id == 50
 
-    assert context.patient_profile["patient_id"] == 1
-    assert context.patient_profile["user_id"] == 10
+    assert (
+        context.patient_profile["patient_id"]
+        == 1
+    )
 
-    assert len(context.medical_history) == 1
-    assert context.medical_history[0]["condition"] == "Headache"
+    assert (
+        context.patient_profile["user_id"]
+        == 10
+    )
 
-    assert len(context.previous_triage_results) == 1
+    assert (
+        len(context.medical_history)
+        == 1
+    )
+
+    assert (
+        context.medical_history[0]["condition"]
+        == "Headache"
+    )
+
+    assert (
+        len(context.previous_triage_results)
+        == 1
+    )
+
     assert (
         context.previous_triage_results[0]["risk_level"]
         == "Low"
