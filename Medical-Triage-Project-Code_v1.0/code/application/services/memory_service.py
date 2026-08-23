@@ -92,6 +92,7 @@ class MemoryService(MemoryPort):
                 .get_by_patient_id(
                     patient_id
                 )
+                or []
             )
 
         triage_results = []
@@ -102,12 +103,12 @@ class MemoryService(MemoryPort):
                 .get_results_by_patient_id(
                     patient_id
                 )
+                or []
             )
 
         patient_profile = None
 
         if patient is not None:
-
             patient_profile = {
                 "patient_id": patient.patient_id,
                 "user_id": patient.user_id,
