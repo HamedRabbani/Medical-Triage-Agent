@@ -6,6 +6,10 @@ from application.services.memory_service import (
     MemoryService,
 )
 
+from application.services.long_term_memory_service import (
+    LongTermMemoryService,
+)
+
 from application.services.triage_agent_service import (
     TriageAgentService,
 )
@@ -43,6 +47,11 @@ def session_agent(
     if not user_message:
         return state
 
+
+    # =========================================================
+    # Services
+    # =========================================================
+
     triage_service = TriageService(
         database_backend.triage
     )
@@ -51,15 +60,33 @@ def session_agent(
         triage_service
     )
 
+
     conversation_service = ConversationService(
         database_backend.conversation
     )
 
-    memory_service = MemoryService(
+
+    short_term_memory_service = MemoryService(
         patient_repository=database_backend.patient,
-        medical_record_repository=database_backend.medical_record,
+        medical_record_repository=(
+            database_backend.medical_record
+        ),
         triage_repository=database_backend.triage,
     )
+
+
+    long_term_memory_service = (
+        LongTermMemoryService(
+            patient_repository=database_backend.patient,
+            medical_record_repository=(
+                database_backend.medical_record
+            ),
+            triage_repository=(
+                database_backend.triage
+            ),
+        )
+    )
+
 
     # =========================================================
     # Load patient information
@@ -76,6 +103,7 @@ def session_agent(
 
     if patient is not None:
         user_id = patient.user_id
+
 
     # =========================================================
     # Create / reuse session
@@ -95,6 +123,7 @@ def session_agent(
             triage_session.session_id
         )
 
+
     # =========================================================
     # Persist user message
     # =========================================================
@@ -107,29 +136,49 @@ def session_agent(
 
     database_backend.triage.commit()
 
+
     # =========================================================
     # Load conversation history
     # =========================================================
 
-    history = conversation_service.get_history(
-        session_id
+    history = (
+        conversation_service
+        .get_history(
+            session_id
+        )
     )
 
+
     # =========================================================
-    # Retrieve memory
+    # Short-term memory
     # =========================================================
 
-    memory_context = memory_service.retrieve(
-        patient_id=patient_id,
-        session_id=session_id,
-        history=history,
+    memory_context = (
+        short_term_memory_service.retrieve(
+            patient_id=patient_id,
+            session_id=session_id,
+            history=history,
+        )
     )
+
+
+    # =========================================================
+    # Long-term memory
+    # =========================================================
+
+    long_term_memory = (
+        long_term_memory_service.retrieve(
+            patient_id=patient_id,
+        )
+    )
+
 
     # =========================================================
     # Return updated state
     # =========================================================
 
     return {
+
         **state,
 
         "patient_id": patient_id,
@@ -138,16 +187,30 @@ def session_agent(
 
         "session_id": session_id,
 
+
+        # Conversation memory
+
         "conversation_history": (
             memory_context
             .short_term
             .recent_messages
         ),
 
+
+        # Short term memory
+
         "short_term_memory": (
             memory_context
             .short_term
         ),
 
+
+        # Aggregated memory context
+
         "memory_context": memory_context,
+
+
+        # Long term memory
+
+        "long_term_memory": long_term_memory,
     }
