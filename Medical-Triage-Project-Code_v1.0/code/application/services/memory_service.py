@@ -74,26 +74,35 @@ class MemoryService(MemoryPort):
             history=history,
         )
 
-        patient = (
-            self.patient_repository
-            .get_patient_by_id(
-                patient_id
-            )
-        )
+        patient = None
 
-        medical_records = (
-            self.medical_record_repository
-            .get_by_patient_id(
-                patient_id
+        if self.patient_repository is not None:
+            patient = (
+                self.patient_repository
+                .get_patient_by_id(
+                    patient_id
+                )
             )
-        )
 
-        triage_results = (
-            self.triage_repository
-            .get_results_by_patient_id(
-                patient_id
+        medical_records = []
+
+        if self.medical_record_repository is not None:
+            medical_records = (
+                self.medical_record_repository
+                .get_by_patient_id(
+                    patient_id
+                )
             )
-        )
+
+        triage_results = []
+
+        if self.triage_repository is not None:
+            triage_results = (
+                self.triage_repository
+                .get_results_by_patient_id(
+                    patient_id
+                )
+            )
 
         patient_profile = None
 
