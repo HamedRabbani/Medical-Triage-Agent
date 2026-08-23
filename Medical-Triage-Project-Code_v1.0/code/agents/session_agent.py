@@ -1,8 +1,8 @@
 from application.services.conversation_service import (
     ConversationService,
 )
-from application.services.short_term_memory_service import (
-    ShortTermMemoryService,
+from application.services.memory_service import (
+    MemoryService,
 )
 from application.services.triage_agent_service import (
     TriageAgentService,
@@ -40,7 +40,11 @@ def session_agent(
         database_backend.conversation
     )
 
-    memory_service = ShortTermMemoryService()
+    memory_service = MemoryService(
+        patient_repository=database_backend.patient,
+        medical_record_repository=database_backend.medical_record,
+        triage_repository=database_backend.triage,
+    )
 
     if session_id is None:
 
@@ -68,7 +72,8 @@ def session_agent(
         session_id
     )
 
-    short_term_memory = memory_service.load(
+    memory_context = memory_service.retrieve(
+        patient_id=patient_id,
         session_id=session_id,
         history=history,
     )
@@ -77,7 +82,10 @@ def session_agent(
         **state,
         "session_id": session_id,
         "conversation_history": (
-            short_term_memory.recent_messages
+            memory_context.short_term.recent_messages
         ),
-        "short_term_memory": short_term_memory,
+        "short_term_memory": (
+            memory_context.short_term
+        ),
+        "memory_context": memory_context,
     }

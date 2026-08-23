@@ -3,7 +3,9 @@ from typing import TypedDict
 from application.contracts.short_term_memory import (
     ShortTermMemory,
 )
-
+from application.contracts.memory_context import (
+    MemoryContext,
+)
 
 class TriageState(TypedDict, total=False):
 
@@ -84,5 +86,5 @@ class TriageState(TypedDict, total=False):
     # =====================================================
     # Memory
     # =====================================================
-
+    memory_context: MemoryContext | None
     short_term_memory: ShortTermMemory | None

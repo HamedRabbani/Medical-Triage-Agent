@@ -1,10 +1,8 @@
-from application.config.settings import Settings
-from application.config.llm_provider import build_llm
-
 from langgraph.graph import END, StateGraph
 
 from state.triage_state import TriageState
 
+from agents.profile_agent import profile_agent
 from agents.session_agent import session_agent
 from agents.conversation_agent import conversation_agent
 from agents.general_conversation_agent import (
@@ -16,6 +14,10 @@ from agents.planner_agent import planner_agent
 from agents.risk_agent import risk_agent
 from agents.supervisor_agent import supervisor_agent
 from agents.persistence_agent import persistence_agent
+
+from application.config.settings import Settings
+from application.config.llm_provider import build_llm
+from application.services.patient_service import PatientService
 
 from infrastructure.database.conversation_persistence_factory import (
     create_database_backend,
@@ -49,23 +51,34 @@ def route_intent(state):
     """
     Route the conversation after intent detection.
 
-    Active triage has priority over GENERAL.
+    Priority:
+    1. PROFILE
+    2. Active TRIAGE
+    3. TRIAGE
+    4. GENERAL
     """
 
+    intent = str(
+        state.get("intent") or ""
+    ).upper()
+
     # ---------------------------------------------------------
-    # Active triage always remains TRIAGE
+    # PROFILE
+    # ---------------------------------------------------------
+
+    if intent == "PROFILE":
+        return "profile"
+
+    # ---------------------------------------------------------
+    # Active TRIAGE
     # ---------------------------------------------------------
 
     if _is_active_triage(state):
         return "triage"
 
     # ---------------------------------------------------------
-    # Normal intent routing
+    # Normal intent
     # ---------------------------------------------------------
-
-    intent = str(
-        state.get("intent") or ""
-    ).upper()
 
     if intent == "TRIAGE":
         return "triage"
@@ -100,7 +113,7 @@ def route_planner(state):
 
 
 # =============================================================
-# General Conversation Wrapper
+# General Conversation
 # =============================================================
 
 def general_conversation(
@@ -114,7 +127,21 @@ def general_conversation(
 
 
 # =============================================================
-# Debug Node
+# Profile
+# =============================================================
+
+def profile(
+    state,
+    patient_service=None,
+):
+    return profile_agent(
+        state,
+        patient_service=patient_service,
+    )
+
+
+# =============================================================
+# Debug
 # =============================================================
 
 def debug_risk_state(state):
@@ -152,24 +179,61 @@ def debug_risk_state(state):
 def build_triage_graph(
     llm_service=None,
     database_backend=None,
+    patient_service=None,
 ):
+    """
+    Build and compile the medical triage graph.
+
+    Dependencies are injectable so tests can provide
+    mocks/fakes without creating real infrastructure.
+
+    If infrastructure dependencies are omitted, they are
+    created automatically for backward compatibility.
+    """
+
+    # ---------------------------------------------------------
+    # Default infrastructure
+    # ---------------------------------------------------------
+
+    if database_backend is None:
+
+        settings = Settings()
+
+        database_backend = (
+            create_database_backend(
+                settings
+            )
+        )
+
+    # ---------------------------------------------------------
+    # Patient service
+    # ---------------------------------------------------------
+
+    if patient_service is None:
+
+        patient_service = PatientService(
+            database_backend.patient
+        )
+
+    # ---------------------------------------------------------
+    # LLM
+    # ---------------------------------------------------------
+
+    if llm_service is None:
+
+        settings = Settings()
+
+        llm_service = build_llm(
+            settings
+        )
+
+    # ---------------------------------------------------------
+    # Graph
+    # ---------------------------------------------------------
 
     graph = StateGraph(
         TriageState
     )
-
-    settings = Settings()
-
-    # ---------------------------------------------------------
-    # Database Backend
-    # ---------------------------------------------------------
-
-    backend = database_backend
-
-    if backend is None:
-        backend = create_database_backend(
-            settings
-        )
 
     # =========================================================
     # Session
@@ -180,7 +244,7 @@ def build_triage_graph(
         lambda state:
             session_agent(
                 state,
-                database_backend=backend,
+                database_backend=database_backend,
             ),
     )
 
@@ -198,6 +262,19 @@ def build_triage_graph(
     )
 
     # =========================================================
+    # Profile
+    # =========================================================
+
+    graph.add_node(
+        "profile",
+        lambda state:
+            profile(
+                state,
+                patient_service=patient_service,
+            ),
+    )
+
+    # =========================================================
     # General Conversation
     # =========================================================
 
@@ -211,7 +288,7 @@ def build_triage_graph(
     )
 
     # =========================================================
-    # Triage
+    # Symptom Analysis
     # =========================================================
 
     graph.add_node(
@@ -219,10 +296,18 @@ def build_triage_graph(
         symptom_agent,
     )
 
+    # =========================================================
+    # Planner
+    # =========================================================
+
     graph.add_node(
         "planner",
         planner_agent,
     )
+
+    # =========================================================
+    # Risk Assessment
+    # =========================================================
 
     graph.add_node(
         "risk_assessment",
@@ -233,22 +318,34 @@ def build_triage_graph(
             ),
     )
 
+    # =========================================================
+    # Debug Risk
+    # =========================================================
+
     graph.add_node(
         "debug_risk",
         debug_risk_state,
     )
+
+    # =========================================================
+    # Supervisor
+    # =========================================================
 
     graph.add_node(
         "supervisor",
         supervisor_agent,
     )
 
+    # =========================================================
+    # Persistence
+    # =========================================================
+
     graph.add_node(
         "persistence",
         lambda state:
             persistence_agent(
                 state,
-                database_backend=backend,
+                database_backend=database_backend,
             ),
     )
 
@@ -277,9 +374,19 @@ def build_triage_graph(
         "conversation",
         route_intent,
         {
+            "profile": "profile",
             "triage": "symptom_analysis",
             "general": "general_conversation",
         },
+    )
+
+    # =========================================================
+    # PROFILE FLOW
+    # =========================================================
+
+    graph.add_edge(
+        "profile",
+        END,
     )
 
     # =========================================================
@@ -333,7 +440,9 @@ def build_triage_graph(
 
 
 # =============================================================
-# LLM Configuration
+# Global Graph
+#
+# Legacy / direct-import compatibility
 # =============================================================
 
 settings = Settings()
@@ -342,16 +451,16 @@ llm_service = build_llm(
     settings
 )
 
-
-# =============================================================
-# Global Graph
-# =============================================================
-
 database_backend = create_database_backend(
     settings
+)
+
+patient_service = PatientService(
+    database_backend.patient
 )
 
 triage_graph = build_triage_graph(
     llm_service=llm_service,
     database_backend=database_backend,
+    patient_service=patient_service,
 )

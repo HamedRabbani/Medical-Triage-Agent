@@ -39,6 +39,12 @@ class TriagePersistencePort(Protocol):
     ):
         ...
 
+    def get_results_by_patient_id(
+        self,
+        patient_id: int,
+    ) -> list:
+        ...
+
     def commit(self) -> None:
         ...
 

@@ -97,25 +97,37 @@ def _is_profile_request(text: str) -> bool:
     """
 
     profile_keywords = [
+        # -----------------------------------------------------
         # Persian
+        # -----------------------------------------------------
+
         "پروفایل",
         "پروفایل من",
         "پروفایل منو",
         "پروفایل خودم",
+
         "اطلاعات من",
         "اطلاعات شخصی من",
         "اطلاعات حساب من",
         "اطلاعات کاربری من",
         "اطلاعاتی که از من داری",
         "چه اطلاعاتی از من داری",
+
         "مشخصات من",
+        "مشخصات خودم",
+
         "سنم",
         "سن من",
+
         "نقشم",
         "نقش من",
+
         "حساب من",
 
+        # -----------------------------------------------------
         # English
+        # -----------------------------------------------------
+
         "my profile",
         "my account",
         "my information",
@@ -147,21 +159,24 @@ def _detect_intent_from_message(
 
     Priority:
 
-    1. Active triage context
-    2. Profile request
+    1. PROFILE request
+    2. Active triage context
     3. Explicit medical information
-    4. Otherwise GENERAL
+    4. GENERAL
+
+    PROFILE intentionally has higher priority than active triage.
+
+    Example:
+
+        Active triage + "پروفایل من رو نشون بده"
+        -> PROFILE
+
+        Active triage + "سن من 30 ساله"
+        -> TRIAGE
     """
 
     # ---------------------------------------------------------
-    # Existing active triage
-    # ---------------------------------------------------------
-
-    if _is_active_triage(state):
-        return "TRIAGE", 1.0
-
-    # ---------------------------------------------------------
-    # Normalize message
+    # Normalize message first
     # ---------------------------------------------------------
 
     text = normalize_text(message)
@@ -170,14 +185,24 @@ def _detect_intent_from_message(
         return "GENERAL", 0.9
 
     # ---------------------------------------------------------
-    # Profile detection
+    # 1. Profile detection
+    #
+    # IMPORTANT:
+    # Profile must be checked BEFORE active triage.
     # ---------------------------------------------------------
 
     if _is_profile_request(text):
         return "PROFILE", 1.0
 
     # ---------------------------------------------------------
-    # Symptom detection
+    # 2. Existing active triage
+    # ---------------------------------------------------------
+
+    if _is_active_triage(state):
+        return "TRIAGE", 1.0
+
+    # ---------------------------------------------------------
+    # 3. Symptom detection
     # ---------------------------------------------------------
 
     symptoms = extract_symptoms(text)
@@ -186,7 +211,7 @@ def _detect_intent_from_message(
         return "TRIAGE", 1.0
 
     # ---------------------------------------------------------
-    # Age detection
+    # 4. Age detection
     # ---------------------------------------------------------
 
     age = extract_age(text)
@@ -195,7 +220,7 @@ def _detect_intent_from_message(
         return "TRIAGE", 0.9
 
     # ---------------------------------------------------------
-    # Duration detection
+    # 5. Duration detection
     # ---------------------------------------------------------
 
     duration = extract_duration(text)
@@ -204,7 +229,7 @@ def _detect_intent_from_message(
         return "TRIAGE", 0.9
 
     # ---------------------------------------------------------
-    # Severity detection
+    # 6. Severity detection
     # ---------------------------------------------------------
 
     severity = extract_severity(text)
@@ -213,7 +238,7 @@ def _detect_intent_from_message(
         return "TRIAGE", 0.9
 
     # ---------------------------------------------------------
-    # No explicit medical information
+    # 7. No explicit medical information
     # ---------------------------------------------------------
 
     return "GENERAL", 0.9
@@ -295,6 +320,7 @@ def conversation_agent(
     )
 
     if message:
+
         history.append(
             {
                 "sender_type": "Patient",
@@ -306,11 +332,12 @@ def conversation_agent(
     # Deterministic Baseline
     # =========================================================
 
-    detected_intent, detected_confidence = (
-        _detect_intent_from_message(
-            state,
-            message,
-        )
+    (
+        detected_intent,
+        detected_confidence,
+    ) = _detect_intent_from_message(
+        state,
+        message,
     )
 
     normalized_message = normalize_text(
@@ -335,7 +362,7 @@ def conversation_agent(
             "severity": extract_severity(
                 normalized_message
             ),
-        }
+        },
     )
 
     print(
@@ -360,6 +387,7 @@ def conversation_agent(
             "intent": "PROFILE",
             "intent_confidence": detected_confidence,
             "assistant_response": None,
+            "response": None,
         }
 
     # =========================================================
@@ -374,14 +402,15 @@ def conversation_agent(
             "intent": detected_intent,
             "intent_confidence": detected_confidence,
             "assistant_response": None,
+            "response": None,
         }
 
     # =========================================================
-    # Intent
+    # Intent Resolution
     #
-    # IMPORTANT:
-    # Active triage remains TRIAGE,
-    # but it must continue to extraction.
+    # PROFILE has already been handled above.
+    #
+    # Active triage remains TRIAGE.
     # =========================================================
 
     if _is_active_triage(state):
@@ -414,6 +443,7 @@ def conversation_agent(
             "intent": "GENERAL",
             "intent_confidence": detected_confidence,
             "assistant_response": None,
+            "response": None,
         }
 
     # =========================================================
@@ -426,14 +456,16 @@ def conversation_agent(
 
     start_time = time.perf_counter()
 
-    extraction_result = llm_service.generate_structured(
-        prompt=f"""
+    extraction_result = (
+        llm_service.generate_structured(
+            prompt=f"""
 Extract medical information from:
 
 {message}
 """,
-        response_model=ConversationExtraction,
-        system_prompt=EXTRACTION_SYSTEM_PROMPT,
+            response_model=ConversationExtraction,
+            system_prompt=EXTRACTION_SYSTEM_PROMPT,
+        )
     )
 
     extraction_latency = (
@@ -454,6 +486,7 @@ Extract medical information from:
         extraction_result,
         ConversationExtraction,
     ):
+
         raise TypeError(
             "Conversation extraction must return "
             "ConversationExtraction."
@@ -468,11 +501,16 @@ Extract medical information from:
     )
 
     if memory is None:
+
         memory = ShortTermMemory(
-            session_id=state.get("session_id"),
+            session_id=state.get(
+                "session_id"
+            ),
         )
 
-    memory_service = ShortTermMemoryService()
+    memory_service = (
+        ShortTermMemoryService()
+    )
 
     memory = memory_service.update(
         memory=memory,
@@ -515,4 +553,6 @@ Extract medical information from:
         ),
 
         "assistant_response": None,
+
+        "response": None,
     }

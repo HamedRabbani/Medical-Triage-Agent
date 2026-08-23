@@ -20,6 +20,16 @@ class SQLPatientRepository(PatientPort):
             patient_id
         )
 
+    def get_by_id(
+        self,
+        patient_id: int,
+    ):
+        """Return a patient by patient ID."""
+
+        return self.get_patient_by_id(
+            patient_id
+        )
+
     def get_patient_by_user_id(
         self,
         user_id: int,

@@ -120,6 +120,16 @@ class SQLTriagePersistenceRepository(
 
         return result
 
+    def get_results_by_patient_id(
+        self,
+        patient_id: int,
+    ) -> list[TriageResult]:
+        """Return previous triage results for a patient."""
+
+        return self.uow.triage.get_results_by_patient_id(
+            patient_id
+        )
+
     # =========================================================
     # Transaction
     # =========================================================

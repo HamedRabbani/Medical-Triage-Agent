@@ -14,8 +14,15 @@ def create_database_backend(
         .lower()
     )
 
+    # =========================================================
+    # SQL Server
+    # =========================================================
+
     if backend == "sqlserver":
 
+        from infrastructure.database.repositories.medical_record_repository import (
+            MedicalRecordRepository,
+        )
         from infrastructure.database.repositories.sql_conversation_history_repository import (
             SQLConversationHistoryRepository,
         )
@@ -45,11 +52,18 @@ def create_database_backend(
             patient=SQLPatientRepository(
                 uow
             ),
+            medical_record=MedicalRecordRepository(
+                session
+            ),
         )
 
         backend.close = session.close
 
         return backend
+
+    # =========================================================
+    # Supabase
+    # =========================================================
 
     if backend == "supabase":
 
@@ -90,6 +104,11 @@ def create_database_backend(
             patient=SupabasePatientRepository(
                 client
             ),
+            # TODO:
+            # Add SupabaseMedicalRecordRepository
+            # when Supabase medical-record persistence
+            # is implemented.
+            medical_record=None,
         )
 
     raise ValueError(

@@ -1,6 +1,12 @@
-from infrastructure.database.models.conversation_msg import ConversationMsg
-from infrastructure.database.models.triage_result import TriageResult
-from infrastructure.database.models.triage_session import TriageSession
+from infrastructure.database.models.conversation_msg import (
+    ConversationMsg,
+)
+from infrastructure.database.models.triage_result import (
+    TriageResult,
+)
+from infrastructure.database.models.triage_session import (
+    TriageSession,
+)
 
 
 class TriageRepository:
@@ -134,6 +140,25 @@ class TriageRepository:
             .query(TriageResult)
             .filter(
                 TriageResult.session_id == session_id
+            )
+            .all()
+        )
+
+    def get_results_by_patient_id(
+        self,
+        patient_id: int,
+    ) -> list[TriageResult]:
+        """Get all triage results for a patient."""
+
+        return (
+            self.session
+            .query(TriageResult)
+            .join(TriageSession)
+            .filter(
+                TriageSession.patient_id == patient_id
+            )
+            .order_by(
+                TriageResult.created_at.desc()
             )
             .all()
         )
