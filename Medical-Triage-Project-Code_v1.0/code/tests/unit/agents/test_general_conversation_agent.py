@@ -1,38 +1,82 @@
-from agents.conversation_agent import conversation_agent
+from application.agents.general_conversation_agent import (
+    general_conversation_agent,
+)
 
 
-def test_triage_intent_is_detected_from_medical_message():
+class FakeLLMService:
+
+    def __init__(self, response):
+        self.response = response
+
+    def generate(
+        self,
+        prompt,
+        system_prompt,
+    ):
+        return self.response
+
+
+def test_general_conversation_returns_llm_response():
+
+    llm = FakeLLMService(
+        "سلام، خوشحالم که اینجا هستید."
+    )
+
     state = {
-        "user_message": (
-            "I have chest pain "
-            "and shortness of breath."
-        ),
-        "symptoms": [],
-        "severity": None,
-        "age": None,
-        "duration": None,
-        "red_flags": [],
+        "user_message": "سلام",
+        "user_roles": ["patient"],
+        "patient_id": 1,
     }
 
-    result = conversation_agent(state)
+    result = general_conversation_agent(
+        state,
+        llm_service=llm,
+    )
 
-    assert result["intent"] == "TRIAGE"
-    assert result["intent_confidence"] == 1.0
-    assert result["assistant_response"] is None
+    assert result["assistant_response"] == (
+        "سلام، خوشحالم که اینجا هستید."
+    )
+
+    assert result["response"] == (
+        "سلام، خوشحالم که اینجا هستید."
+    )
 
 
-def test_general_intent_is_detected():
+def test_general_conversation_preserves_state():
+
+    llm = FakeLLMService(
+        "سلام"
+    )
+
     state = {
-        "user_message": "سلام، حالت چطوره؟",
-        "symptoms": [],
-        "severity": None,
-        "age": None,
-        "duration": None,
-        "red_flags": [],
+        "user_message": "سلام",
+        "user_roles": ["patient"],
+        "patient_id": 10,
+        "age": 30,
+        "symptoms": ["headache"],
     }
 
-    result = conversation_agent(state)
+    result = general_conversation_agent(
+        state,
+        llm_service=llm,
+    )
 
-    assert result["intent"] == "GENERAL"
-    assert result["intent_confidence"] == 0.9
-    assert result["assistant_response"] is None
+    assert result["patient_id"] == 10
+    assert result["age"] == 30
+    assert result["symptoms"] == ["headache"]
+
+
+def test_general_conversation_without_llm_has_fallback():
+
+    state = {
+        "user_message": "سلام",
+        "user_roles": ["patient"],
+        "patient_id": 1,
+    }
+
+    result = general_conversation_agent(
+        state,
+        llm_service=None,
+    )
+
+    assert result["assistant_response"]

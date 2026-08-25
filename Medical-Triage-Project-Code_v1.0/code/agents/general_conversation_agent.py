@@ -24,6 +24,12 @@ def general_conversation_agent(
 ):
     """
     Handle GENERAL conversation.
+
+    This agent is responsible only for generating
+    the assistant response.
+
+    Persistence is handled by the graph/application
+    layer, not by this agent.
     """
 
     user_message = state.get(
@@ -39,7 +45,6 @@ def general_conversation_agent(
 
     user_message = user_message.strip()
 
-
     print(
         "\n========== GENERAL DEBUG =========="
     )
@@ -54,8 +59,9 @@ def general_conversation_agent(
         llm_service,
     )
 
-
+    # =========================================================
     # Empty message
+    # =========================================================
 
     if not user_message:
 
@@ -74,8 +80,9 @@ def general_conversation_agent(
             "response": response,
         }
 
-
+    # =========================================================
     # No LLM available
+    # =========================================================
 
     if llm_service is None:
 
@@ -94,8 +101,9 @@ def general_conversation_agent(
             "response": response,
         }
 
-
+    # =========================================================
     # Prompt
+    # =========================================================
 
     prompt = f"""
 User message:
@@ -105,7 +113,6 @@ User message:
 Reply naturally.
 """
 
-
     try:
 
         response = llm_service.generate(
@@ -113,23 +120,18 @@ Reply naturally.
             system_prompt=SYSTEM_PROMPT,
         )
 
-
         print(
             "RAW LLM RESPONSE:",
             response,
         )
 
-
         if not isinstance(
             response,
             str,
         ):
-
             response = str(response)
 
-
         response = response.strip()
-
 
     except Exception as exc:
 
@@ -142,13 +144,15 @@ Reply naturally.
             "متوجه شدم. چطور می‌توانم کمکتان کنم؟"
         )
 
+    # =========================================================
+    # Empty LLM response
+    # =========================================================
 
     if not response:
 
         response = (
             "متوجه شدم. چطور می‌توانم کمکتان کنم؟"
         )
-
 
     print(
         "FINAL RESPONSE:",
@@ -158,7 +162,6 @@ Reply naturally.
     print(
         "===================================\n"
     )
-
 
     return {
         **state,

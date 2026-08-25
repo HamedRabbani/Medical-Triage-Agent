@@ -21,6 +21,15 @@ from agents.medical_response_agent import (
 from application.config.settings import Settings
 from application.config.llm_provider import build_llm
 from application.services.patient_service import PatientService
+from application.services.conversation_service import (
+    ConversationService,
+)
+from application.services.triage_service import (
+    TriageService,
+)
+from application.services.triage_agent_service import (
+    TriageAgentService,
+)
 
 from infrastructure.database.conversation_persistence_factory import (
     create_database_backend,
@@ -129,11 +138,92 @@ def route_supervisor(state):
 def general_conversation(
     state,
     llm_service=None,
+    database_backend=None,
 ):
-    return general_conversation_agent(
+    """
+    Generate GENERAL response and persist the
+    assistant message.
+
+    The actual response generation remains inside
+    general_conversation_agent.
+
+    Persistence is handled here because the current
+    DatabaseBackend exposes message creation through
+    the triage persistence port.
+    """
+
+    # ---------------------------------------------------------
+    # Generate assistant response
+    # ---------------------------------------------------------
+
+    state = general_conversation_agent(
         state,
         llm_service=llm_service,
     )
+
+    response = state.get(
+        "assistant_response"
+    )
+
+    session_id = state.get(
+        "session_id"
+    )
+
+    # ---------------------------------------------------------
+    # Safety checks
+    # ---------------------------------------------------------
+
+    if not response:
+        return state
+
+    if session_id is None:
+        return state
+
+    if database_backend is None:
+        return state
+
+    # ---------------------------------------------------------
+    # Persist assistant message
+    # ---------------------------------------------------------
+
+    triage_service = TriageService(
+        database_backend.triage
+    )
+
+    agent_service = TriageAgentService(
+        triage_service
+    )
+
+    agent_service.add_message(
+        session_id=session_id,
+        content=response,
+        sender_type="Agent",
+    )
+
+    database_backend.triage.commit()
+
+    # ---------------------------------------------------------
+    # Reload conversation history
+    # ---------------------------------------------------------
+
+    conversation_service = ConversationService(
+        database_backend.conversation
+    )
+
+    history = conversation_service.get_history(
+        session_id
+    )
+
+    # ---------------------------------------------------------
+    # Return updated state
+    # ---------------------------------------------------------
+
+    return {
+        **state,
+        "conversation_history": history,
+        "assistant_response": response,
+        "response": response,
+    }
 
 
 def profile(
@@ -331,6 +421,7 @@ def build_triage_graph(
             general_conversation(
                 state,
                 llm_service=llm_service,
+                database_backend=database_backend,
             ),
     )
 
@@ -580,21 +671,17 @@ def build_triage_graph(
 
 settings = Settings()
 
-
 llm_service = build_llm(
     settings
 )
-
 
 database_backend = create_database_backend(
     settings
 )
 
-
 patient_service = PatientService(
     database_backend.patient
 )
-
 
 rag_service = create_rag_service()
 

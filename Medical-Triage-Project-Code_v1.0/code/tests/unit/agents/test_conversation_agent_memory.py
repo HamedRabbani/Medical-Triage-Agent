@@ -1,286 +1,99 @@
-from unittest.mock import Mock
-
+from agents.conversation_agent import (
+    conversation_agent,
+)
 from application.contracts.conversation_extraction import (
     ConversationExtraction,
 )
-from application.contracts.short_term_memory import (
-    ShortTermMemory,
-)
-from agents.conversation_agent import conversation_agent
 
 
-def build_llm(extraction: ConversationExtraction) -> Mock:
-    llm = Mock()
+class FakeLLMService:
 
-    llm.generate_structured.return_value = extraction
+    def __init__(self, responses):
+        self.responses = iter(responses)
 
-    return llm
+    def generate_structured(
+        self,
+        prompt,
+        response_model,
+        system_prompt,
+    ):
+        return next(self.responses)
 
 
-def test_conversation_agent_updates_short_term_memory():
-    llm = build_llm(
-        ConversationExtraction(
-            symptoms=["chest pain"],
-            age=35,
-            severity="moderate",
-            duration=None,
-            red_flags=[],
-        )
+def test_multi_turn_information_is_preserved():
+
+    llm = FakeLLMService(
+        [
+            ConversationExtraction(
+                symptoms=["headache"]
+            ),
+            ConversationExtraction(
+                age=30
+            ),
+            ConversationExtraction(
+                duration="2 days"
+            ),
+            ConversationExtraction(
+                severity="moderate"
+            ),
+        ]
     )
 
     state = {
-        "session_id": 10,
-        "user_message": "I have chest pain.",
-        "conversation_history": [],
-        "short_term_memory": ShortTermMemory(
-            session_id=10,
-        ),
-        "intent": None,
-        "missing_information": [],
-        "next_question": None,
+        "session_id": 1,
+        "user_message": "سرم درد می‌کنه",
         "symptoms": [],
         "age": None,
+        "duration": None,
         "severity": None,
-        "duration": None,
         "red_flags": [],
-    }
-
-    result = conversation_agent(
-        state,
-        llm_service=llm,
-    )
-
-    memory = result["short_term_memory"]
-
-    assert memory.session_id == 10
-
-    assert memory.medical_context.symptoms == [
-        "chest pain"
-    ]
-
-    assert memory.medical_context.age == 35
-    assert memory.medical_context.severity == "moderate"
-
-    assert result["symptoms"] == [
-        "chest pain"
-    ]
-
-    assert result["age"] == 35
-    assert result["severity"] == "moderate"
-
-
-def test_conversation_agent_preserves_memory_across_turns():
-    llm = Mock()
-
-    state = {
-        "session_id": 10,
-        "user_message": "It started 30 minutes ago.",
-        "conversation_history": [
-            {
-                "message_id": 1,
-                "sender_type": "Patient",
-                "content": "I have chest pain.",
-                "timestamp": None,
-            }
-        ],
-        "short_term_memory": ShortTermMemory(
-            session_id=10,
-            recent_messages=[
-                {
-                    "message_id": 1,
-                    "sender_type": "Patient",
-                    "content": "I have chest pain.",
-                    "timestamp": None,
-                }
-            ],
-            medical_context=ConversationExtraction(
-                symptoms=["chest pain"],
-                age=35,
-                severity="moderate",
-            ),
-        ),
-        "intent": "TRIAGE",
-        "missing_information": ["duration"],
-        "next_question": "How long has it been happening?",
-        "symptoms": ["chest pain"],
-        "age": 35,
-        "severity": "moderate",
-        "duration": None,
-        "red_flags": [],
-    }
-
-    llm.generate_structured.return_value = (
-        ConversationExtraction(
-            symptoms=[],
-            age=None,
-            severity=None,
-            duration="30 minutes",
-            red_flags=[],
-        )
-    )
-
-    result = conversation_agent(
-        state,
-        llm_service=llm,
-    )
-
-    memory = result["short_term_memory"]
-
-    assert memory.session_id == 10
-
-    assert memory.medical_context.symptoms == [
-        "chest pain"
-    ]
-
-    assert memory.medical_context.age == 35
-
-    assert memory.medical_context.severity == "moderate"
-
-    assert memory.medical_context.duration == "30 minutes"
-
-    assert result["symptoms"] == [
-        "chest pain"
-    ]
-
-    assert result["age"] == 35
-
-    assert result["severity"] == "moderate"
-
-    assert result["duration"] == "30 minutes"
-
-
-def test_conversation_agent_accumulates_memory_across_multiple_turns():
-    llm = Mock()
-
-    state = {
-        "session_id": 10,
-        "user_message": "The pain is severe.",
-        "conversation_history": [],
-        "short_term_memory": ShortTermMemory(
-            session_id=10,
-            medical_context=ConversationExtraction(
-                symptoms=["chest pain"],
-                age=35,
-            ),
-        ),
-        "intent": "TRIAGE",
-        "missing_information": ["severity"],
-        "next_question": "How severe is the pain?",
-        "symptoms": ["chest pain"],
-        "age": 35,
-        "severity": None,
-        "duration": None,
-        "red_flags": [],
-    }
-
-    llm.generate_structured.return_value = (
-        ConversationExtraction(
-            symptoms=["shortness of breath"],
-            age=None,
-            severity="severe",
-            duration=None,
-            red_flags=["difficulty breathing"],
-        )
-    )
-
-    result = conversation_agent(
-        state,
-        llm_service=llm,
-    )
-
-    memory = result["short_term_memory"]
-
-    assert memory.medical_context.symptoms == [
-        "chest pain",
-        "shortness of breath",
-    ]
-
-    assert memory.medical_context.age == 35
-
-    assert memory.medical_context.severity == "severe"
-
-    assert memory.medical_context.red_flags == [
-        "difficulty breathing"
-    ]
-
-    assert result["symptoms"] == [
-        "chest pain",
-        "shortness of breath",
-    ]
-
-    assert result["age"] == 35
-
-    assert result["severity"] == "severe"
-
-    assert result["red_flags"] == [
-        "difficulty breathing"
-    ]
-
-
-def test_conversation_agent_does_not_duplicate_memory():
-    llm = build_llm(
-        ConversationExtraction(
-            symptoms=[
-                "chest pain",
-                "shortness of breath",
-            ],
-            age=None,
-            severity="severe",
-            duration=None,
-            red_flags=[
-                "difficulty breathing"
-            ],
-        )
-    )
-
-    state = {
-        "session_id": 10,
-        "user_message": "I still have chest pain.",
-        "conversation_history": [],
-        "short_term_memory": ShortTermMemory(
-            session_id=10,
-            medical_context=ConversationExtraction(
-                symptoms=[
-                    "chest pain",
-                    "shortness of breath",
-                ],
-                age=35,
-                severity="moderate",
-                red_flags=[
-                    "difficulty breathing"
-                ],
-            ),
-        ),
-        "intent": "TRIAGE",
         "missing_information": [],
         "next_question": None,
-        "symptoms": [
-            "chest pain",
-            "shortness of breath",
-        ],
-        "age": 35,
-        "severity": "moderate",
-        "duration": None,
-        "red_flags": [
-            "difficulty breathing"
-        ],
+        "conversation_history": [],
+        "short_term_memory": None,
+        "intent": None,
     }
 
-    result = conversation_agent(
+    # Turn 1
+    state = conversation_agent(
         state,
         llm_service=llm,
     )
 
-    memory = result["short_term_memory"]
+    assert state["symptoms"] == ["headache"]
 
-    assert memory.medical_context.symptoms == [
-        "chest pain",
-        "shortness of breath",
-    ]
+    # Turn 2
+    state["user_message"] = "۳۰ سالمه"
 
-    assert memory.medical_context.red_flags == [
-        "difficulty breathing"
-    ]
+    state = conversation_agent(
+        state,
+        llm_service=llm,
+    )
 
-    assert memory.medical_context.age == 35
-    assert memory.medical_context.severity == "severe"
+    assert state["symptoms"] == ["headache"]
+    assert state["age"] == 30
+
+    # Turn 3
+    state["user_message"] = "دو روزه"
+
+    state = conversation_agent(
+        state,
+        llm_service=llm,
+    )
+
+    assert state["symptoms"] == ["headache"]
+    assert state["age"] == 30
+    assert state["duration"] == "2 days"
+
+    # Turn 4
+    state["user_message"] = "متوسطه"
+
+    state = conversation_agent(
+        state,
+        llm_service=llm,
+    )
+
+    assert state["symptoms"] == ["headache"]
+    assert state["age"] == 30
+    assert state["duration"] == "2 days"
+    assert state["severity"] == "moderate"

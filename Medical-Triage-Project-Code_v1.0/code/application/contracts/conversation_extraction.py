@@ -12,6 +12,8 @@ class ConversationExtraction(BaseModel):
 
     duration: str | None = None
 
+    pain_location: str | None = None
+
     red_flags: list[str] = Field(
         default_factory=list
     )

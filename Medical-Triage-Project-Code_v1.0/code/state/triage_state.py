@@ -3,9 +3,11 @@ from typing import TypedDict
 from application.contracts.short_term_memory import (
     ShortTermMemory,
 )
+
 from application.contracts.memory_context import (
     MemoryContext,
 )
+
 
 class TriageState(TypedDict, total=False):
 
@@ -14,7 +16,12 @@ class TriageState(TypedDict, total=False):
     # =====================================================
 
     patient_id: int | None
+
     session_id: int | None
+
+    user_id: int | None
+
+    user_roles: list[str]
 
     # =====================================================
     # Input
@@ -27,9 +34,14 @@ class TriageState(TypedDict, total=False):
     # =====================================================
 
     age: int | None
+
     symptoms: list[str]
+
     severity: str | None
+
     duration: str | None
+
+    pain_location: str | None
 
     # =====================================================
     # Rule-Based Risk Assessment
@@ -38,7 +50,9 @@ class TriageState(TypedDict, total=False):
     red_flags: list[str]
 
     risk_level: str | None
+
     confidence: float | None
+
     recommendation: str | None
 
     # =====================================================
@@ -46,15 +60,21 @@ class TriageState(TypedDict, total=False):
     # =====================================================
 
     missing_information: list[str]
+
     next_question: str | None
+
+    immediate_high_risk: bool
 
     # =====================================================
     # LLM Risk Assessment
     # =====================================================
 
     llm_risk_level: str | None
+
     llm_confidence: float | None
+
     llm_red_flags: list[str] | None
+
     llm_recommendation: str | None
 
     # =====================================================
@@ -70,11 +90,13 @@ class TriageState(TypedDict, total=False):
     conversation_history: list[dict]
 
     intent: str | None
+
     intent_confidence: float | None
 
     triage_active: bool
-    
+
     assistant_response: str | None
+
     response: str | None
 
     # =====================================================
@@ -86,10 +108,10 @@ class TriageState(TypedDict, total=False):
     # =====================================================
     # Memory
     # =====================================================
+
     memory_context: MemoryContext | None
+
     short_term_memory: ShortTermMemory | None
-
-
 
     # =====================================================
     # RAG

@@ -1,11 +1,14 @@
 import time
+import re
 
 from application.contracts.conversation_extraction import (
     ConversationExtraction,
 )
+
 from application.contracts.short_term_memory import (
     ShortTermMemory,
 )
+
 from application.services.short_term_memory_service import (
     ShortTermMemoryService,
 )
@@ -63,6 +66,27 @@ Extract ONLY information explicitly provided by the user.
 
 Do not invent information.
 
+Extract the following fields when explicitly present:
+
+- symptoms
+- severity
+- age
+- duration
+- pain_location
+- red_flags
+
+For pain_location:
+
+- Extract the anatomical location of pain only when
+  the user explicitly states it.
+- Examples:
+  "درد شکمم" -> pain_location = "abdomen"
+  "سردرد دارم" -> pain_location = "head"
+  "کمرم درد می‌کند" -> pain_location = "back"
+  "درد قفسه سینه دارم" -> pain_location = "chest"
+- If the user only says "درد دارم", do NOT invent a location.
+  Return pain_location = null.
+
 Return structured output only.
 """
 
@@ -77,10 +101,16 @@ def _is_active_triage(state):
     an active medical triage flow.
     """
 
-    if state.get("missing_information"):
+    if state.get(
+        "missing_information"
+    ):
+
         return True
 
-    if state.get("next_question") is not None:
+    if state.get(
+        "next_question"
+    ) is not None:
+
         return True
 
     return False
@@ -90,13 +120,16 @@ def _is_active_triage(state):
 # Profile Intent Detection
 # =============================================================
 
-def _is_profile_request(text: str) -> bool:
+def _is_profile_request(
+    text: str,
+) -> bool:
     """
     Detect whether the user is asking about
     their own profile/account information.
     """
 
     profile_keywords = [
+
         # -----------------------------------------------------
         # Persian
         # -----------------------------------------------------
@@ -163,85 +196,155 @@ def _detect_intent_from_message(
     2. Active triage context
     3. Explicit medical information
     4. GENERAL
-
-    PROFILE intentionally has higher priority than active triage.
-
-    Example:
-
-        Active triage + "پروفایل من رو نشون بده"
-        -> PROFILE
-
-        Active triage + "سن من 30 ساله"
-        -> TRIAGE
     """
 
-    # ---------------------------------------------------------
-    # Normalize message first
-    # ---------------------------------------------------------
-
-    text = normalize_text(message)
+    text = normalize_text(
+        message
+    )
 
     if not text:
-        return "GENERAL", 0.9
 
-    # ---------------------------------------------------------
-    # 1. Profile detection
-    #
-    # IMPORTANT:
-    # Profile must be checked BEFORE active triage.
-    # ---------------------------------------------------------
+        return (
+            "GENERAL",
+            0.9,
+        )
 
-    if _is_profile_request(text):
-        return "PROFILE", 1.0
+    # =========================================================
+    # Profile
+    # =========================================================
 
-    # ---------------------------------------------------------
-    # 2. Existing active triage
-    # ---------------------------------------------------------
+    if _is_profile_request(
+        text
+    ):
 
-    if _is_active_triage(state):
-        return "TRIAGE", 1.0
+        return (
+            "PROFILE",
+            1.0,
+        )
 
-    # ---------------------------------------------------------
-    # 3. Symptom detection
-    # ---------------------------------------------------------
+    # =========================================================
+    # Existing active triage
+    # =========================================================
 
-    symptoms = extract_symptoms(text)
+    if _is_active_triage(
+        state
+    ):
+
+        return (
+            "TRIAGE",
+            1.0,
+        )
+
+    # =========================================================
+    # Symptom detection
+    # =========================================================
+
+    symptoms = extract_symptoms(
+        text
+    )
 
     if symptoms:
-        return "TRIAGE", 1.0
 
-    # ---------------------------------------------------------
-    # 4. Age detection
-    # ---------------------------------------------------------
+        return (
+            "TRIAGE",
+            1.0,
+        )
 
-    age = extract_age(text)
+    # =========================================================
+    # Age detection
+    # =========================================================
+    age = extract_age(
+        text
+    )
 
     if age is not None:
-        return "TRIAGE", 0.9
 
-    # ---------------------------------------------------------
-    # 5. Duration detection
-    # ---------------------------------------------------------
+        return (
+            "TRIAGE",
+            0.9,
+        )
 
-    duration = extract_duration(text)
+    # =========================================================
+    # Duration detection
+    # =========================================================
+
+    duration = extract_duration(
+        text
+    )
 
     if duration is not None:
-        return "TRIAGE", 0.9
 
-    # ---------------------------------------------------------
-    # 6. Severity detection
-    # ---------------------------------------------------------
+        return (
+            "TRIAGE",
+            0.9,
+        )
 
-    severity = extract_severity(text)
+    # =========================================================
+    # Severity detection
+    # =========================================================
+
+    severity = extract_severity(
+        text
+    )
 
     if severity is not None:
-        return "TRIAGE", 0.9
 
-    # ---------------------------------------------------------
-    # 7. No explicit medical information
-    # ---------------------------------------------------------
+        return (
+            "TRIAGE",
+            0.9,
+        )
 
-    return "GENERAL", 0.9
+    # =========================================================
+    # General
+    # =========================================================
+
+    return (
+        "GENERAL",
+        0.9,
+    )
+
+
+# =============================================================
+# Pain Location Mapping
+# =============================================================
+
+def _infer_pain_location_from_symptoms(
+    symptoms: list[str],
+) -> str | None:
+    """
+    Infer pain location only from an already-detected
+    canonical symptom.
+
+    This is deterministic and does not invent a location
+    for generic pain.
+    """
+
+    location_map = {
+
+        "chest pain": "chest",
+
+        "abdominal pain": "abdomen",
+
+        "back pain": "back",
+
+        "neck pain": "neck",
+
+        "leg pain": "leg",
+
+        "headache": "head",
+    }
+
+    for symptom in symptoms:
+
+        location = location_map.get(
+            symptom
+        )
+
+        if location:
+
+            return location
+
+    return None
 
 
 # =============================================================
@@ -262,7 +365,10 @@ def conversation_agent(
         message,
         str,
     ):
-        message = str(message)
+
+        message = str(
+            message
+        )
 
     message = message.strip()
 
@@ -295,13 +401,22 @@ def conversation_agent(
     )
 
     print(
+        "Pain Location:",
+        state.get("pain_location"),
+    )
+
+    print(
         "Missing Information:",
-        state.get("missing_information"),
+        state.get(
+            "missing_information"
+        ),
     )
 
     print(
         "Next Question:",
-        state.get("next_question"),
+        state.get(
+            "next_question"
+        ),
     )
 
     print(
@@ -310,6 +425,13 @@ def conversation_agent(
 
     # =========================================================
     # Conversation History
+    #
+    # IMPORTANT:
+    #
+    # session_agent already persists the current message
+    # and reloads conversation history from the database.
+    #
+    # Therefore DO NOT append the current message again.
     # =========================================================
 
     history = list(
@@ -318,15 +440,6 @@ def conversation_agent(
         )
         or []
     )
-
-    if message:
-
-        history.append(
-            {
-                "sender_type": "Patient",
-                "content": message,
-            }
-        )
 
     # =========================================================
     # Deterministic Baseline
@@ -344,23 +457,40 @@ def conversation_agent(
         message
     )
 
+    detected_age = extract_age(
+        normalized_message
+    )
+
+    detected_symptoms = extract_symptoms(
+        normalized_message
+    )
+
+    detected_duration = extract_duration(
+        normalized_message
+    )
+
+    detected_severity = extract_severity(
+        normalized_message
+    )
+
+    deterministic_pain_location = (
+        _infer_pain_location_from_symptoms(
+            detected_symptoms
+        )
+    )
+
     print(
         "[DETERMINISTIC DEBUG]",
         {
             "message": message,
             "intent": detected_intent,
             "confidence": detected_confidence,
-            "age": extract_age(
-                normalized_message
-            ),
-            "symptoms": extract_symptoms(
-                normalized_message
-            ),
-            "duration": extract_duration(
-                normalized_message
-            ),
-            "severity": extract_severity(
-                normalized_message
+            "age": detected_age,
+            "symptoms": detected_symptoms,
+            "duration": detected_duration,
+            "severity": detected_severity,
+            "pain_location": (
+                deterministic_pain_location
             ),
         },
     )
@@ -383,10 +513,17 @@ def conversation_agent(
 
         return {
             **state,
+
             "conversation_history": history,
+
             "intent": "PROFILE",
-            "intent_confidence": detected_confidence,
+
+            "intent_confidence": (
+                detected_confidence
+            ),
+
             "assistant_response": None,
+
             "response": None,
         }
 
@@ -398,28 +535,34 @@ def conversation_agent(
 
         return {
             **state,
+
             "conversation_history": history,
+
             "intent": detected_intent,
-            "intent_confidence": detected_confidence,
+
+            "intent_confidence": (
+                detected_confidence
+            ),
+
             "assistant_response": None,
+
             "response": None,
         }
 
     # =========================================================
     # Intent Resolution
-    #
-    # PROFILE has already been handled above.
-    #
-    # Active triage remains TRIAGE.
     # =========================================================
 
-    if _is_active_triage(state):
+    if _is_active_triage(
+        state
+    ):
 
         print(
             "[ROUTING] Active triage -> TRIAGE"
         )
 
         intent = "TRIAGE"
+
         confidence = 1.0
 
     elif detected_intent == "TRIAGE":
@@ -429,7 +572,10 @@ def conversation_agent(
         )
 
         intent = "TRIAGE"
-        confidence = detected_confidence
+
+        confidence = (
+            detected_confidence
+        )
 
     else:
 
@@ -439,10 +585,17 @@ def conversation_agent(
 
         return {
             **state,
+
             "conversation_history": history,
+
             "intent": "GENERAL",
-            "intent_confidence": detected_confidence,
+
+            "intent_confidence": (
+                detected_confidence
+            ),
+
             "assistant_response": None,
+
             "response": None,
         }
 
@@ -459,7 +612,7 @@ def conversation_agent(
     extraction_result = (
         llm_service.generate_structured(
             prompt=f"""
-Extract medical information from:
+Extract medical information from this user's message:
 
 {message}
 """,
@@ -493,6 +646,43 @@ Extract medical information from:
         )
 
     # =========================================================
+    # Deterministic Safety / Consistency
+    #
+    # If the LLM failed to identify a specific location,
+    # use our deterministic symptom mapping.
+    # =========================================================
+
+    extracted_pain_location = (
+        extraction_result.pain_location
+    )
+
+    if (
+        extracted_pain_location is None
+        and deterministic_pain_location is not None
+    ):
+
+        extracted_pain_location = (
+            deterministic_pain_location
+        )
+
+    # =========================================================
+    # Preserve Previous Pain Location
+    # =========================================================
+
+    previous_pain_location = state.get(
+        "pain_location"
+    )
+
+    if (
+        extracted_pain_location is None
+        and previous_pain_location is not None
+    ):
+
+        extracted_pain_location = (
+            previous_pain_location
+        )
+
+    # =========================================================
     # Memory Update
     # =========================================================
 
@@ -508,6 +698,21 @@ Extract medical information from:
             ),
         )
 
+    # =========================================================
+    # Make sure the extraction contains the
+    # deterministic pain location.
+    # =========================================================
+
+    extraction_result = (
+        extraction_result.model_copy(
+            update={
+                "pain_location": (
+                    extracted_pain_location
+                ),
+            }
+        )
+    )
+
     memory_service = (
         ShortTermMemoryService()
     )
@@ -521,6 +726,10 @@ Extract medical information from:
     # Final State
     # =========================================================
 
+    medical_context = (
+        memory.medical_context
+    )
+
     return {
         **state,
 
@@ -533,23 +742,27 @@ Extract medical information from:
         "intent_confidence": confidence,
 
         "symptoms": (
-            memory.medical_context.symptoms
+            medical_context.symptoms
         ),
 
         "age": (
-            memory.medical_context.age
+            medical_context.age
         ),
 
         "duration": (
-            memory.medical_context.duration
+            medical_context.duration
         ),
 
         "severity": (
-            memory.medical_context.severity
+            medical_context.severity
+        ),
+
+        "pain_location": (
+            medical_context.pain_location
         ),
 
         "red_flags": (
-            memory.medical_context.red_flags
+            medical_context.red_flags
         ),
 
         "assistant_response": None,
