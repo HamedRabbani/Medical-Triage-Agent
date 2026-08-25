@@ -1,6 +1,3 @@
-import time
-
-
 from application.contracts.llm_risk_assessment import (
     LLMRiskAssessment,
 )
@@ -11,7 +8,8 @@ from rules.triage_rules import evaluate_triage
 SYSTEM_PROMPT = """
 You are a medical triage risk assessment assistant.
 
-Assess risk ONLY from explicitly provided patient information.
+Assess risk ONLY from explicitly provided patient information
+and the retrieved medical knowledge context.
 
 Return structured output.
 
@@ -25,7 +23,12 @@ Rules:
 - Severe symptoms -> HIGH
 - Otherwise -> LOW
 
-Do not invent symptoms or medical information.
+Important:
+- Retrieved medical knowledge is reference context.
+- Do not treat retrieved knowledge as patient symptoms.
+- Do not invent patient information.
+- Do not override explicit patient information with assumptions.
+- The deterministic rule-based assessment is the safety baseline.
 """
 
 
@@ -37,26 +40,39 @@ def risk_agent(
     Perform deterministic and LLM-based risk assessment.
 
     The deterministic rule engine is the safety baseline.
-    The LLM provides an independent assessment.
+    The LLM provides an independent assessment using
+    retrieved medical knowledge as additional context.
 
-    Both results are preserved in the state.
+    RAG does not override the rule-based assessment.
     """
 
     # =========================================================
     # 1. Rule-based baseline
     # =========================================================
 
-    rule_result = evaluate_triage(state)
-
-    rule_risk_level = rule_result.get("risk_level")
-    rule_confidence = rule_result.get("confidence")
-
-    rule_red_flags = list(
-        rule_result.get("red_flags") or []
+    rule_result = evaluate_triage(
+        state
     )
 
-    rule_recommendation = rule_result.get(
-        "recommendation"
+    rule_risk_level = rule_result.get(
+        "risk_level"
+    )
+
+    rule_confidence = rule_result.get(
+        "confidence"
+    )
+
+    rule_red_flags = list(
+        rule_result.get(
+            "red_flags"
+        )
+        or []
+    )
+
+    rule_recommendation = (
+        rule_result.get(
+            "recommendation"
+        )
     )
 
     # =========================================================
@@ -69,7 +85,38 @@ def risk_agent(
     llm_recommendation = None
 
     # =========================================================
-    # 3. LLM assessment
+    # 3. Retrieved medical knowledge
+    # =========================================================
+
+    rag_context = (
+        state.get("rag_context")
+        or []
+    )
+
+    # =========================================================
+    # 4. Build RAG context
+    # =========================================================
+
+    rag_context_text = "\n\n".join(
+        (
+            f"Source: "
+            f"{item.get('source', 'unknown')}\n"
+            f"Content:\n"
+            f"{item.get('content', '')}"
+        )
+        for item in rag_context
+        if item.get("content")
+    )
+
+    if not rag_context_text:
+
+        rag_context_text = (
+            "No retrieved medical knowledge "
+            "is available."
+        )
+
+    # =========================================================
+    # 5. LLM assessment
     # =========================================================
 
     if llm_service is not None:
@@ -83,13 +130,27 @@ Age: {state.get("age")}
 Duration: {state.get("duration")}
 Red flags: {state.get("red_flags", [])}
 
-Assess the triage risk.
+Retrieved medical knowledge:
+
+{rag_context_text}
+
+Assess the triage risk using the explicitly
+provided patient information.
+
+Use the retrieved medical knowledge only
+as supporting medical context.
+
+Do not assume that information appearing
+in the retrieved context is a symptom of
+the patient.
 """
 
-        llm_result = llm_service.generate_structured(
-            prompt=prompt,
-            response_model=LLMRiskAssessment,
-            system_prompt=SYSTEM_PROMPT,
+        llm_result = (
+            llm_service.generate_structured(
+                prompt=prompt,
+                response_model=LLMRiskAssessment,
+                system_prompt=SYSTEM_PROMPT,
+            )
         )
 
         # -----------------------------------------------------
@@ -105,11 +166,17 @@ Assess the triage risk.
                 "LLMRiskAssessment."
             )
 
-        llm_risk_level = llm_result.risk_level
-        llm_confidence = llm_result.confidence
+        llm_risk_level = (
+            llm_result.risk_level
+        )
+
+        llm_confidence = (
+            llm_result.confidence
+        )
 
         llm_red_flags = list(
-            llm_result.red_flags or []
+            llm_result.red_flags
+            or []
         )
 
         llm_recommendation = (
@@ -117,21 +184,49 @@ Assess the triage risk.
         )
 
     # =========================================================
-    # 4. Return complete state
+    # 6. Return complete state
     # =========================================================
 
     return {
         **state,
 
+        # -----------------------------------------------------
         # Rule Engine
-        "risk_level": rule_risk_level,
-        "confidence": rule_confidence,
-        "red_flags": rule_red_flags,
-        "recommendation": rule_recommendation,
+        # -----------------------------------------------------
 
+        "risk_level": rule_risk_level,
+
+        "confidence": rule_confidence,
+
+        "red_flags": rule_red_flags,
+
+        "recommendation": (
+            rule_recommendation
+        ),
+
+        # -----------------------------------------------------
+        # RAG
+        # -----------------------------------------------------
+
+        "rag_context": rag_context,
+
+        # -----------------------------------------------------
         # LLM
-        "llm_risk_level": llm_risk_level,
-        "llm_confidence": llm_confidence,
-        "llm_red_flags": llm_red_flags,
-        "llm_recommendation": llm_recommendation,
+        # -----------------------------------------------------
+
+        "llm_risk_level": (
+            llm_risk_level
+        ),
+
+        "llm_confidence": (
+            llm_confidence
+        ),
+
+        "llm_red_flags": (
+            llm_red_flags
+        ),
+
+        "llm_recommendation": (
+            llm_recommendation
+        ),
     }

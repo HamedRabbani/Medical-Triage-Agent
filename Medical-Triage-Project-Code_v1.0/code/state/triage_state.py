@@ -88,3 +88,11 @@ class TriageState(TypedDict, total=False):
     # =====================================================
     memory_context: MemoryContext | None
     short_term_memory: ShortTermMemory | None
+
+
+
+    # =====================================================
+    # RAG
+    # =====================================================
+
+    rag_context: list[dict]

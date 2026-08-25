@@ -8,12 +8,15 @@ from agents.conversation_agent import conversation_agent
 from agents.general_conversation_agent import (
     general_conversation_agent,
 )
-
+from agents.rag_agent import rag_agent
 from agents.symptom_agent import symptom_agent
 from agents.planner_agent import planner_agent
 from agents.risk_agent import risk_agent
 from agents.supervisor_agent import supervisor_agent
 from agents.persistence_agent import persistence_agent
+from agents.medical_response_agent import (
+    medical_response_agent,
+)
 
 from application.config.settings import Settings
 from application.config.llm_provider import build_llm
@@ -23,16 +26,16 @@ from infrastructure.database.conversation_persistence_factory import (
     create_database_backend,
 )
 
+from infrastructure.rag.rag_factory import (
+    create_rag_service,
+)
+
 
 # =============================================================
-# Active Triage Detection
+# Intent Routing
 # =============================================================
 
 def _is_active_triage(state) -> bool:
-    """
-    Determine whether the conversation is already
-    inside an active medical triage flow.
-    """
 
     if state.get("missing_information"):
         return True
@@ -43,42 +46,17 @@ def _is_active_triage(state) -> bool:
     return False
 
 
-# =============================================================
-# Intent Router
-# =============================================================
-
 def route_intent(state):
-    """
-    Route the conversation after intent detection.
-
-    Priority:
-    1. PROFILE
-    2. Active TRIAGE
-    3. TRIAGE
-    4. GENERAL
-    """
 
     intent = str(
         state.get("intent") or ""
     ).upper()
 
-    # ---------------------------------------------------------
-    # PROFILE
-    # ---------------------------------------------------------
-
     if intent == "PROFILE":
         return "profile"
 
-    # ---------------------------------------------------------
-    # Active TRIAGE
-    # ---------------------------------------------------------
-
     if _is_active_triage(state):
         return "triage"
-
-    # ---------------------------------------------------------
-    # Normal intent
-    # ---------------------------------------------------------
 
     if intent == "TRIAGE":
         return "triage"
@@ -90,11 +68,13 @@ def route_intent(state):
 
 
 # =============================================================
-# Planner Router
+# Planner Routing
 # =============================================================
 
 def route_planner(state):
 
+    # Immediate high-risk cases must not wait
+    # for additional information.
     if state.get(
         "immediate_high_risk",
         False,
@@ -113,7 +93,37 @@ def route_planner(state):
 
 
 # =============================================================
-# General Conversation
+# Supervisor Routing
+# =============================================================
+
+def route_supervisor(state):
+
+    status = state.get(
+        "supervisor_status"
+    )
+
+    # Approved assessment can proceed
+    # to patient-facing response.
+    if status == "APPROVED":
+        return "response"
+
+    # Conflicting rule/LLM assessment requires
+    # review, but the patient should still receive
+    # a safe response based on the deterministic
+    # triage decision.
+    if status == "REVIEW_REQUIRED":
+        return "response"
+
+    # Rejected assessment must not be presented
+    # as a valid patient-facing assessment.
+    if status == "REJECTED":
+        return "end"
+
+    return "end"
+
+
+# =============================================================
+# Agent Wrappers
 # =============================================================
 
 def general_conversation(
@@ -126,10 +136,6 @@ def general_conversation(
     )
 
 
-# =============================================================
-# Profile
-# =============================================================
-
 def profile(
     state,
     patient_service=None,
@@ -137,6 +143,16 @@ def profile(
     return profile_agent(
         state,
         patient_service=patient_service,
+    )
+
+
+def retrieve_medical_knowledge(
+    state,
+    rag_service=None,
+):
+    return rag_agent(
+        state,
+        rag_service=rag_service,
     )
 
 
@@ -166,33 +182,68 @@ def debug_risk_state(state):
     )
 
     print(
+        "LLM Risk:",
+        state.get("llm_risk_level"),
+    )
+
+    print(
+        "LLM Confidence:",
+        state.get("llm_confidence"),
+    )
+
+    print(
+        "Supervisor:",
+        state.get("supervisor_status"),
+    )
+
+    print(
         "================================\n"
     )
 
     return state
 
 
+def debug_supervisor_state(state):
+
+    print(
+        "\n========== SUPERVISOR DEBUG =========="
+    )
+
+    print(
+        "Rule Risk:",
+        state.get("risk_level"),
+    )
+
+    print(
+        "LLM Risk:",
+        state.get("llm_risk_level"),
+    )
+
+    print(
+        "Supervisor Status:",
+        state.get("supervisor_status"),
+    )
+
+    print(
+        "======================================\n"
+    )
+
+    return state
+
+
 # =============================================================
-# Build Graph
+# Graph Builder
 # =============================================================
 
 def build_triage_graph(
     llm_service=None,
     database_backend=None,
     patient_service=None,
+    rag_service=None,
 ):
-    """
-    Build and compile the medical triage graph.
-
-    Dependencies are injectable so tests can provide
-    mocks/fakes without creating real infrastructure.
-
-    If infrastructure dependencies are omitted, they are
-    created automatically for backward compatibility.
-    """
 
     # ---------------------------------------------------------
-    # Default infrastructure
+    # Dependencies
     # ---------------------------------------------------------
 
     if database_backend is None:
@@ -205,19 +256,11 @@ def build_triage_graph(
             )
         )
 
-    # ---------------------------------------------------------
-    # Patient service
-    # ---------------------------------------------------------
-
     if patient_service is None:
 
         patient_service = PatientService(
             database_backend.patient
         )
-
-    # ---------------------------------------------------------
-    # LLM
-    # ---------------------------------------------------------
 
     if llm_service is None:
 
@@ -227,8 +270,12 @@ def build_triage_graph(
             settings
         )
 
+    if rag_service is None:
+
+        rag_service = create_rag_service()
+
     # ---------------------------------------------------------
-    # Graph
+    # State Graph
     # ---------------------------------------------------------
 
     graph = StateGraph(
@@ -249,7 +296,7 @@ def build_triage_graph(
     )
 
     # =========================================================
-    # Conversation
+    # Conversation / Intent
     # =========================================================
 
     graph.add_node(
@@ -306,6 +353,19 @@ def build_triage_graph(
     )
 
     # =========================================================
+    # RAG
+    # =========================================================
+
+    graph.add_node(
+        "rag_retrieval",
+        lambda state:
+            retrieve_medical_knowledge(
+                state,
+                rag_service=rag_service,
+            ),
+    )
+
+    # =========================================================
     # Risk Assessment
     # =========================================================
 
@@ -317,10 +377,6 @@ def build_triage_graph(
                 llm_service=llm_service,
             ),
     )
-
-    # =========================================================
-    # Debug Risk
-    # =========================================================
 
     graph.add_node(
         "debug_risk",
@@ -334,6 +390,24 @@ def build_triage_graph(
     graph.add_node(
         "supervisor",
         supervisor_agent,
+    )
+
+    graph.add_node(
+        "debug_supervisor",
+        debug_supervisor_state,
+    )
+
+    # =========================================================
+    # Medical Response
+    # =========================================================
+
+    graph.add_node(
+        "medical_response",
+        lambda state:
+            medical_response_agent(
+                state,
+                llm_service=llm_service,
+            ),
     )
 
     # =========================================================
@@ -350,7 +424,7 @@ def build_triage_graph(
     )
 
     # =========================================================
-    # Entry
+    # Entry Point
     # =========================================================
 
     graph.set_entry_point(
@@ -358,7 +432,7 @@ def build_triage_graph(
     )
 
     # =========================================================
-    # Session -> Conversation
+    # Session → Conversation
     # =========================================================
 
     graph.add_edge(
@@ -367,7 +441,7 @@ def build_triage_graph(
     )
 
     # =========================================================
-    # Intent Routing
+    # Conversation → Intent
     # =========================================================
 
     graph.add_conditional_edges(
@@ -381,7 +455,7 @@ def build_triage_graph(
     )
 
     # =========================================================
-    # PROFILE FLOW
+    # Profile → END
     # =========================================================
 
     graph.add_edge(
@@ -390,7 +464,7 @@ def build_triage_graph(
     )
 
     # =========================================================
-    # GENERAL FLOW
+    # General Conversation → END
     # =========================================================
 
     graph.add_edge(
@@ -399,7 +473,7 @@ def build_triage_graph(
     )
 
     # =========================================================
-    # TRIAGE FLOW
+    # Symptom Analysis → Planner
     # =========================================================
 
     graph.add_edge(
@@ -407,60 +481,131 @@ def build_triage_graph(
         "planner",
     )
 
+    # =========================================================
+    # Planner Routing
+    # =========================================================
+
     graph.add_conditional_edges(
         "planner",
         route_planner,
         {
+            # More information is required.
+            # End this turn and wait for the
+            # next user message.
             "ask": END,
-            "risk": "risk_assessment",
+
+            # Enough information or immediate
+            # high-risk condition.
+            "risk": "rag_retrieval",
         },
     )
+
+    # =========================================================
+    # RAG → Risk
+    # =========================================================
+
+    graph.add_edge(
+        "rag_retrieval",
+        "risk_assessment",
+    )
+
+    # =========================================================
+    # Risk → Debug
+    # =========================================================
 
     graph.add_edge(
         "risk_assessment",
         "debug_risk",
     )
 
+    # =========================================================
+    # Debug Risk → Supervisor
+    # =========================================================
+
     graph.add_edge(
         "debug_risk",
         "supervisor",
     )
 
+    # =========================================================
+    # Supervisor → Debug
+    # =========================================================
+
     graph.add_edge(
         "supervisor",
+        "debug_supervisor",
+    )
+
+    # =========================================================
+    # Supervisor Gate
+    # =========================================================
+
+    graph.add_conditional_edges(
+        "debug_supervisor",
+        route_supervisor,
+        {
+            "response": "medical_response",
+            "end": END,
+        },
+    )
+
+    # =========================================================
+    # Medical Response → Persistence
+    # =========================================================
+
+    graph.add_edge(
+        "medical_response",
         "persistence",
     )
+
+    # =========================================================
+    # Persistence → END
+    # =========================================================
 
     graph.add_edge(
         "persistence",
         END,
     )
 
+    # =========================================================
+    # Compile
+    # =========================================================
+
     return graph.compile()
 
 
 # =============================================================
-# Global Graph
-#
-# Legacy / direct-import compatibility
+# Application-level Dependencies
 # =============================================================
 
 settings = Settings()
+
 
 llm_service = build_llm(
     settings
 )
 
+
 database_backend = create_database_backend(
     settings
 )
+
 
 patient_service = PatientService(
     database_backend.patient
 )
 
+
+rag_service = create_rag_service()
+
+
+# =============================================================
+# Application-level Graph
+# =============================================================
+
 triage_graph = build_triage_graph(
     llm_service=llm_service,
     database_backend=database_backend,
     patient_service=patient_service,
+    rag_service=rag_service,
 )

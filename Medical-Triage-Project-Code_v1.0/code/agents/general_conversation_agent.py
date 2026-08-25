@@ -4,23 +4,17 @@ from application.contracts.general_conversation_response import (
 
 
 SYSTEM_PROMPT = """
-You are the general conversation assistant of a medical triage system.
-
-Your job is to handle normal conversational messages that do not
-require medical triage.
+You are the general conversation assistant of a medical AI triage system.
 
 Rules:
-
-- Answer the user's message directly.
-- Be concise, natural, polite, and useful.
-- Support both English and Persian.
-- Respond in the same language as the user whenever possible.
-- Do not diagnose medical conditions.
-- Do not invent medical information.
-- Do not unnecessarily start a triage process.
-- Do not mention internal agents, LangGraph, prompts, models,
-  routing, or system architecture.
-- Return a plain text response only.
+- Always answer in the same language as the user.
+- If the user writes Persian, answer only in Persian.
+- If the user writes English, answer only in English.
+- Be natural and concise.
+- Do not diagnose diseases.
+- Do not make medical decisions.
+- Do not mention system architecture.
+- Return only the final answer.
 """
 
 
@@ -29,7 +23,7 @@ def general_conversation_agent(
     llm_service=None,
 ):
     """
-    Generate a natural response for GENERAL conversation.
+    Handle GENERAL conversation.
     """
 
     user_message = state.get(
@@ -45,50 +39,33 @@ def general_conversation_agent(
 
     user_message = user_message.strip()
 
-    # =========================================================
-    # Authorization Check
-    # Admin / Doctor without selected patient
-    # cannot start medical triage
-    # =========================================================
 
-    roles = [
-        str(role).lower()
-        for role in state.get(
-            "user_roles",
-            [],
-        )
-    ]
-
-    patient_id = state.get(
-        "patient_id"
+    print(
+        "\n========== GENERAL DEBUG =========="
     )
 
-    medical_keywords = [
-        "درد",
-        "تب",
-        "سردرد",
-        "قفسه سینه",
-        "علائم",
-        "بیماری",
-        "pain",
-        "fever",
-        "symptom",
-        "chest pain",
-    ]
+    print(
+        "USER MESSAGE:",
+        user_message,
+    )
 
-    if (
-        "patient" not in roles
-        and patient_id is None
-        and any(
-            keyword in user_message.lower()
-            for keyword in medical_keywords
-        )
-    ):
+    print(
+        "LLM SERVICE:",
+        llm_service,
+    )
+
+
+    # Empty message
+
+    if not user_message:
 
         response = (
-            "برای انجام ارزیابی پزشکی، "
-            "لطفاً با حساب بیمار وارد شوید "
-            "یا ابتدا یک بیمار را انتخاب کنید."
+            "سلام. چطور می‌توانم کمکتان کنم؟"
+        )
+
+        print(
+            "EMPTY FALLBACK:",
+            response,
         )
 
         return {
@@ -97,66 +74,91 @@ def general_conversation_agent(
             "response": response,
         }
 
-    # =========================================================
-    # No LLM
-    # =========================================================
+
+    # No LLM available
 
     if llm_service is None:
 
-        fallback = (
+        response = (
             "سلام. چطور می‌توانم کمکتان کنم؟"
+        )
+
+        print(
+            "NO LLM FALLBACK:",
+            response,
         )
 
         return {
             **state,
-            "assistant_response": fallback,
-            "response": fallback,
+            "assistant_response": response,
+            "response": response,
         }
 
-    # =========================================================
-    # Empty message
-    # =========================================================
 
-    if not user_message:
-
-        fallback = (
-            "سلام. چطور می‌توانم کمکتان کنم؟"
-        )
-
-        return {
-            **state,
-            "assistant_response": fallback,
-            "response": fallback,
-        }
-
-    # =========================================================
-    # Build prompt
-    # =========================================================
+    # Prompt
 
     prompt = f"""
 User message:
 
 {user_message}
 
-Conversation history:
-
-{state.get("conversation_history", [])}
-
-Respond naturally to the user.
+Reply naturally.
 """
 
-    # =========================================================
-    # Plain-text LLM call
-    # =========================================================
 
-    response = llm_service.generate(
-        prompt=prompt,
-        system_prompt=SYSTEM_PROMPT,
-    ).strip()
+    try:
 
-    # =========================================================
-    # Final State
-    # =========================================================
+        response = llm_service.generate(
+            prompt=prompt,
+            system_prompt=SYSTEM_PROMPT,
+        )
+
+
+        print(
+            "RAW LLM RESPONSE:",
+            response,
+        )
+
+
+        if not isinstance(
+            response,
+            str,
+        ):
+
+            response = str(response)
+
+
+        response = response.strip()
+
+
+    except Exception as exc:
+
+        print(
+            "GENERAL LLM ERROR:",
+            exc,
+        )
+
+        response = (
+            "متوجه شدم. چطور می‌توانم کمکتان کنم؟"
+        )
+
+
+    if not response:
+
+        response = (
+            "متوجه شدم. چطور می‌توانم کمکتان کنم؟"
+        )
+
+
+    print(
+        "FINAL RESPONSE:",
+        response,
+    )
+
+    print(
+        "===================================\n"
+    )
+
 
     return {
         **state,
