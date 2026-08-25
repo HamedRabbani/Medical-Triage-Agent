@@ -36,15 +36,22 @@ class OllamaAdapter(LLMPort):
                 }
             )
 
+        messages.append(
+            {
+                "role": "user",
+                "content": prompt,
+            }
+        )
+
         response = self._client.chat(
-        model=self._model,
-        messages=messages,
-        keep_alive="30m",
-        options={
-            "num_ctx": 2048,
-            "num_predict": 128,
-        },
-    )
+            model=self._model,
+            messages=messages,
+            keep_alive="30m",
+            options={
+                "num_ctx": 2048,
+                "num_predict": 128,
+            },
+        )
 
         return response.message.content
 
@@ -77,6 +84,7 @@ class OllamaAdapter(LLMPort):
             model=self._model,
             messages=messages,
             format=response_model.model_json_schema(),
+            keep_alive="30m",
         )
 
         raw_content = response.message.content
